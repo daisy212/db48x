@@ -1,782 +1,379 @@
-// ****************************************************************************
-//  main.cc                                                       DB48X project
-// ****************************************************************************
-//
-//   File Description:
-//
-//      The DB48X main RPL loop
-//
-//
-//
-//
-//
-//
-//
-//
-// ****************************************************************************
-//   (C) 2022 Christophe de Dinechin <christophe@dinechin.org>
-//   This software is licensed under the terms outlined in LICENSE.txt
-// ****************************************************************************
-//   This file is part of DB48X.
-//
-//   DB48X is free software: you can redistribute it and/or modify
-//   it under the terms outlined in the LICENSE.txt file
-//
-//   DB48X is distributed in the hope that it will be useful,
-//   but WITHOUT ANY WARRANTY; without even the implied warranty of
-//   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-//
-// This code is distantly derived from the SwissMicro SDKDemo calculator
 
-#include "main.h"
+#include <stdio.h>
 
-#include "blitter.h"
-#include "dmcp.h"
-#include "expression.h"
-#include "font.h"
-#include "program.h"
-#include "recorder.h"
-#include "stack.h"
-#include "sysmenu.h"
-#include "target.h"
-#include "user_interface.h"
-#include "util.h"
+#include "Global.h"
 
-#if SIMULATOR
-#  include "tests.h"
+
+#include "SEGGER.h"
+
+#include "BSP.h"
+
+
+#include "DBx_tsk_usb.h"
+
+
+//#include "DBx_tsk_pw_kbd.h"
+
+
+#include "DBxxxx.h"
+
+
+
+
+#define MAX_MB_KEYBOARD 32
+#define MAX_MB_SYSTEM 32
+#define SIZE_DATA_KEYBOARD (sizeof(st_key_data))
+#define SIZE_DATA_SYSTEM (sizeof(st_sys_data))
+
+
+
+static OS_RAM  OS_TASK     TCBHP, TCBLP;                // Task control blocks
+OS_RAM  OS_TASK     TKBD, TDB48X, TUSB, TLCD, TLPW, TTST_DB, TTST_FS;    /* Task-control-block */
+
+static OS_STACKPTR OS_RAM  int StackHP[128], StackLP[1024];  // Task stacks
+static OS_STACKPTR OS_RAM  int StackLpwr[512];
+static OS_STACKPTR OS_RAM  int StackTest_DB[1024];
+static OS_STACKPTR OS_RAM  int StackTest_FS[4096];
+static OS_STACKPTR OS_RAM  int StackDb48x[8192];        /* Task stack 32ko */
+static OS_STACKPTR OS_RAM  int StackKbd[512];
+static OS_STACKPTR OS_RAM  int StackUsb[512];
+
+OS_EVENT    OS_RAM    WAKE_UP_EVENT, KBD_Event, EV_LCD_DMA_END,  DBu_Start, USB_Start, LED_Start, EV_db_lcd_kbd_ready, EV_db_app_ready, FOR_EVER, RTC_Event, PB_Event;
+
+OS_MAILBOX  OS_RAM   Mb_Keyboard, Mb_Sys;
+
+OS_MUTEX    OS_RAM   Mut_SPIFS;
+
+static char   OS_RAM   Mb_KeyboardBuffer[MAX_MB_KEYBOARD * SIZE_DATA_KEYBOARD ];
+static char   OS_RAM   Mb_SysBuffer[MAX_MB_SYSTEM * SIZE_DATA_SYSTEM ];
+char OS_RAM buff[256];
+uint32_t db_calc_state = 0;
+
+
+//static char BOARD_RAM1 lcd_mem[536][336/8];
+
+#define PWM_FREQ                (100u)                         // 100 Hz PWM frequency
+#define PWM_PERIOD              (1000000u / PWM_FREQ)          // PWM period in microseconds (100 Hz => 10,000 microseconds)
+#define PWM_RESOLUTION          (100u)                         // PWM resolution
+#define PWM_RESOLUTION_PERIOD   (PWM_PERIOD / PWM_RESOLUTION)  // PWM resolution period in microseconds (100 microseconds)
+
+
+// compiling EmFile with embOs Ultra
+void FS_ErrorOutf     (U32 Type, const char * sFormat, ...){
+   va_list args;
+   va_start(args, sFormat);
+   SEGGER_RTT_vprintf(0, sFormat, &args);
+}
+int  SEGGER_vsnprintf    (char* pBuffer, int BufferSize, const char* sFormat, va_list ParamList){
+   return SEGGER_RTT_vprintf(0, sFormat, &ParamList);
+}
+
+   char buffext[1024];
+
+void dbxxxx_recorder(const char * sFctName, const char * sFormat, ...)
+// redirection record
+// debug message, deleted in release mode
+{
+#if DEBUG
+   va_list args;
+   va_start(args, sFormat);
+   FS_FILE * pFile;
+   char      acFileName[40] = {"debug\\record.txt"};
+   char      sTime[64];
+   int nb =strcmp("sparse_fonts", sFctName);
+   if (0 == nb) return;
+   nb =strcmp("gc_details", sFctName);
+   if (0 == nb) return;
+   nb =strcmp("editor", sFctName);
+   if (0 == nb) return;
+   uint32_t tmp = sys_current_ms();
+
+   snprintf(sTime, sizeof(sTime), "\n%04d.%03d[%s] ", (tmp/1000)%10000,tmp%1000, sFctName);
+   vsnprintf(buffext, sizeof(buffext),  sFormat, args);
+   va_end(args);
+
+   #if RecorderToDisk
+      pFile = FS_FOpen(acFileName, "ab");
+      if (pFile != NULL) {
+         (void)FS_Write(pFile, sTime, strlen(sTime));
+         (void)FS_Write(pFile, buffext, strlen(buffext));
+         (void)FS_FClose(pFile);
+      }
+   #endif      // RecorderToDisk
+   #if RecorderToRTT
+      SEGGER_RTT_printf(0, sTime );
+      SEGGER_RTT_printf(0,  buffext);
+   #endif      // RecorderToRTT
+
+#endif // DEBUG
+}
+
+
+void task_lpwr(void)
+{
+//   if (db_power_state >PW_running)
+ //  {
+
+
+
+      HAL_PWREx_EnterSTOP1Mode(PWR_STOPENTRY_WFI);
+      SystemClock_Config_P160();
+ //  }
+ //  else
+ //  {
+ //     OS_TASK_Delay_ms(20);
+ //  }
+}
+
+
+// draw keyboard keys
+#define KEY_H     ((LCD_HEIGHT -40)/ 6 -5)
+#define KEY_W     (LCD_WIDTH / 12 -5)
+void      draw_key(int x , int y, bool release )
+{
+if ((1==x)&&(9==y)) return;
+   // calculate coordinates
+   int k_x, k_y;
+   int k_w= KEY_W;
+   int k_h= KEY_H;
+
+   int m_k = kbd_row[y-1].missing_key;
+   if ((m_k !=0)&&(6==x)) return;
+
+   k_x = 5 + (x-1) * (KEY_W + 3);
+   k_y = 40 + 3*(KEY_H + 3) + (y-1)* (KEY_H + 3);
+   if (y> 3) {
+      k_x += (KEY_W + 3) * 6 + LCD_WIDTH/80;
+      k_y -=  (KEY_H + 3) *6;
+   }
+
+   if (2 == m_k )  { // ligne enter
+      if (x==1){
+         k_x += KEY_W/3;
+         k_w += KEY_W/2;
+      }
+      else {
+         k_x += (KEY_W + 3);      
+      }
+   }
+   if (3 == m_k )  { // ligne operand
+      if (x>1)
+      {
+         k_x += 3 + (x-1) * KEY_W/4;      
+      }
+      if ((8==y)&&(1==x))
+      {
+         k_h = (KEY_H *3)/2;
+         k_y += KEY_H/3;
+
+      }
+      else 
+      k_h = KEY_H;
+   }
+
+   if ((k_x <0) | ((k_x + k_w) >= LCD_WIDTH)) return;
+   if ((k_y <0) | ((k_y + KEY_H) >= LCD_HEIGHT)) return;
+
+   if (release)  {
+      LCD_FillRect( &hlcd, k_x, k_y, k_w, k_h, 0);
+      LCD_DrawRect( &hlcd, k_x, k_y, k_w, k_h, 1);
+   }
+   else{ 
+      LCD_FillRect( &hlcd, k_x, k_y, k_w, k_h, 1);
+   }
+}
+
+//void lcd_forced_refresh(void);
+
+/*********************************************************************
+*
+*       demo task with only keyboard display
+*/
+__weak void DBx_Task_App(void){
+   char result = 0;
+   uint32_t t_lcd_buff =0, t_lcd_dma =0, t_mark =0;
+   st_key_data drcvd;
+   st_sys_data srcvd;
+
+   int  key        = 0;
+   uint32_t key_tmp=0, key_p1 =0, key_p2=0, key_p3=0, keybdata=0;
+   bool transalpha = false;
+   bool key_release = false;
+   OS_TASKEVENT MyEvents;
+
+   OS_EVENT_GetBlocked(&EV_db_lcd_kbd_ready);
+
+   snprintf(buff, sizeof(buff), "%s v%s %dMhz %dko Lcd %dx%d 49keys H",HARD_NAME, HARD_VERSION, SystemCoreClock/1000000, DB_MEM_SIZE, LCD_WIDTH, LCD_HEIGHT);
+   display_text_12x24(&hlcd, 2, 4, buff,1);
+
+   snprintf(buff, sizeof(buff), "-");
+   display_text_12x24(&hlcd, 10, 76, buff,1);
+
+   Disp_Update(&hlcd, true, true);
+   for (int x = 1; x<=KB_COL ; x++)
+      for (int y = 1; y<=KB_ROW ; y++)
+         draw_key(x , y, 1);
+   t_mark = Get_Elapsed_Dual_Res(0);
+   Disp_Update(&hlcd, true, false);
+   t_lcd_buff = Get_Elapsed_Dual_Res(t_mark);
+   Disp_WaitForTransfer(&hlcd);
+   t_lcd_dma = Get_Elapsed_Dual_Res(t_mark);
+
+   OS_EVENT_Set(&EV_db_app_ready);
+   while (1)
+   {
+      HAL_LPTIM_TimeOut_Start_IT(&hlptim1, (30000*1024)/1000-1);
+      MyEvents = OS_TASKEVENT_GetSingleTimed( 
+         EV_DBx_KBD 
+         | EV_DBx_WAKEUP 
+         | EV_DBx_USB_CON 
+         | EV_DBx_USB_DIS
+         | EV_DBx_RESET
+         | EV_DBx_PB_PA0
+         , KB_SCRUT_PERIOD);
+
+      if (MyEvents)
+      {
+         LCD_FillRect( &hlcd, 10, 28, 250, 24, 0);
+         uint32_t tmp = sys_current_ms();
+         snprintf(buff, sizeof(buff), "%04d.%03d [%03X] %d, %d", (tmp/1000)%10000,tmp%1000, MyEvents, t_lcd_buff, t_lcd_dma);
+         display_text_12x24(&hlcd, 10, 28, buff,1);
+
+         uint32_t raw_ll = keybd.raw &  ((uint64_t)0xffffffff);
+         uint32_t raw_hh = keybd.raw >> ((uint64_t) 32);
+   
+         LCD_FillRect( &hlcd, 10, 76, 250, 24, 0);
+         snprintf(buff, sizeof(buff), "%08x %08x ", raw_hh, raw_ll);
+         display_text_12x24(&hlcd, 10, 76, buff,1);
+      }
+
+      if ( EV_DBx_PB_PA0 & MyEvents) 
+         {
+            Disp_Update(&hlcd, true, false);
+         }
+      if ( EV_DBx_KBD & MyEvents) 
+      {
+         while (      0 == OS_MAILBOX_GetTimed(&Mb_Keyboard, &drcvd, KB_SCRUT_PERIOD))
+         { // key
+            key_release = drcvd.released;
+            RTT_vprintf_cr_time( "key %02d %02d %02d %02d, %02d, %02d, %02d %s %02d", 
+               drcvd.key3, drcvd.key2, drcvd.key1, drcvd.key,
+               key_p1, key_p2, key_p3, key_release ?"Rls":"Psh", key );
+            draw_key( drcvd.key %10 , drcvd.key /10 , key_release);
+            Disp_Update(&hlcd, true, false);
+         }
+      }
+      else if ( EV_DBx_RESET & MyEvents)  
+      { // message reset
+         RTT_vprintf_cr_time( "Db48x reset");
+         snprintf(buff, sizeof(buff), "[F1] [F6] [Exit] reset");
+         LCD_FillRect( &hlcd, 10, 100, 180, 24, 0);
+         display_text_12x24(&hlcd, 10, 100, buff,1);
+         Disp_Update(&hlcd, true, false);
+         while(1){}
+      }
+      else if ( EV_DBx_WAKEUP & MyEvents)  
+      { // message rtc
+            RTT_vprintf_cr_time( "xxxDb48x wake-up after poweroff");
+            snprintf(buff, sizeof(buff), "xxxrtc : %d", keybd.sleeping_time_sec+1);
+         LCD_FillRect( &hlcd, 10, 100, 180, 24, 0);
+         display_text_12x24(&hlcd, 10, 100, buff,1);
+         Disp_Update(&hlcd, true, false);
+      }
+      else if ( EV_DBx_USB_CON & MyEvents)  
+      { // message usb, display new frequency
+         int length= 12*  snprintf(buff, sizeof(buff), "USB_connected    ");
+      
+         LCD_FillRect( &hlcd, 10, 125, length, 24, 0);
+         display_text_12x24(&hlcd, 10, 125, buff,1);
+         snprintf(buff, sizeof(buff), "%s v%s %dMhz %dko Lcd %dx%d 49keys H",HARD_NAME, HARD_VERSION, SystemCoreClock/1000000, DB_MEM_SIZE, LCD_WIDTH, LCD_HEIGHT);
+         LCD_FillRect( &hlcd, 2, 4, 520, 24, 0);
+         display_text_12x24(&hlcd, 2, 4, buff,1);
+         Disp_Update(&hlcd, true, false);
+         OS_TASKEVENT_Set( &TUSB, EV_USB_ACQ);
+      }
+      else if ( EV_DBx_USB_DIS & MyEvents)  
+      { // message usb, display new frequency
+         int length= 12*  snprintf(buff, sizeof(buff), "USB_disconnected ");
+         LCD_FillRect( &hlcd, 10, 125, length, 24, 0);
+         display_text_12x24(&hlcd, 10, 125, buff,1);
+         snprintf(buff, sizeof(buff), "%s v%s %dMhz %dko Lcd %dx%d 49keys H",HARD_NAME, HARD_VERSION, SystemCoreClock/1000000, DB_MEM_SIZE, LCD_WIDTH, LCD_HEIGHT);
+         LCD_FillRect( &hlcd, 2, 4, 520, 24, 0);
+         display_text_12x24(&hlcd, 2, 4, buff,1);
+         Disp_Update(&hlcd, true, false);
+         OS_TASKEVENT_Set( &TUSB, EV_USB_ACQ);
+      }
+   }
+}
+void DBx_Task_Usb_ip(void) ;
+
+//uint32_t current_printf_level = DL_keyboard | DL_timers |DL_low_power;
+uint32_t current_printf_level = DL_low_power;
+
+
+/*********************************************************************
+*
+*       main()
+*/
+int main(void) {
+   OS_Init();    // Initialize embOS
+   OS_InitHW();  // Initialize required hardware
+
+   Init_Usb_Detect();
+   init_unused_pins();     // analog input, pull-down
+   BSP_Init();             // Initialize LED ports
+
+   uint32_t stat = RTC_GetDebugStatus();
+   if (!RTC_Config_1024_Granularity(false)) RTC_Config_1024_Granularity(true);
+   uint32_t stat2 = RTC_GetDebugStatus();
+   SEGGER_RTT_printf(0, "\nRtc status : %X, after rtc init : %0X", stat, stat2);
+
+   MX_LPTIM1_Init();
+// remplacement rtc ???
+   MX_LPTIM3_Init();  
+
+//   RTC_SetBuildTime();
+   bool res_bkpram = false;
+//   res_bkpram = bkSRAM_Init();
+   SEGGER_RTT_printf(0, "\nBackup sram : %s", res_bkpram ? "ok" : "initialized");
+
+//   bkSRAM_ReadString(1, buff, sizeof(buff));
+   SEGGER_RTT_printf(0, "\nBkp string n1 : %s\n", buff);
+
+//   init_button_pa0();
+
+   OS_MAILBOX_Create(&Mb_Keyboard, SIZE_DATA_KEYBOARD, MAX_MB_KEYBOARD, &Mb_KeyboardBuffer);
+   OS_MAILBOX_Create(&Mb_Sys, SIZE_DATA_SYSTEM, MAX_MB_SYSTEM, &Mb_SysBuffer);
+   
+   OS_EVENT_Create(&WAKE_UP_EVENT);
+   OS_EVENT_Create(&EV_USB_Vbus);
+   OS_EVENT_Create(&KBD_Event);
+   OS_EVENT_Create(&PB_Event);
+   OS_EVENT_Create(&USB_Event);
+   OS_EVENT_Create(&DBu_Start);
+   OS_EVENT_Create(&USB_Start);
+   OS_EVENT_Create(&EV_db_app_ready);
+   OS_EVENT_Create(&EV_db_lcd_kbd_ready);
+   OS_EVENT_Create(&LED_Start);
+   OS_EVENT_Create(&FOR_EVER);
+   OS_EVENT_Create(&RTC_Event);
+   OS_EVENT_Create(&EV_LCD_DMA_END);
+   OS_MUTEX_Create(&Mut_SPIFS);
+
+// Keyboard and low power
+   OS_TASK_CREATE(&TKBD, "Kbd Task", 90, DBx_Task_Kbd, StackKbd);
+
+// Application task, weak for testing kbd
+   OS_TASK_CREATE(&TDB48X, "App task",  80, DBx_Task_App, StackDb48x); 
+
+   OS_TASK_CREATE(&TUSB, "Usb Task", 85, DBx_Task_Usb_ip, StackUsb);
+
+// stop mode 2, in this task, or in keyboard task
+#if STOP_LOW_P_TASK
+   OS_TASK_CREATE(&TLPW, "low power Task",  1, task_lpwr, StackLpwr);
 #endif
-
-
-#include <algorithm>
-#include <cctype>
-#include <cmath>
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
-
-using std::max;
-using std::min;
-
-
-
-// ============================================================================
-//
-// Those are put in the same file to guarantee initialization order
-//
-// ============================================================================
-
-// Initialize the screen
-surface Screen((pixword *) lcd_line_addr(0), LCD_W, LCD_H, LCD_SCANLINE, LCD_W);
-
-// Pre-built patterns for shades of grey
-const pattern pattern::black   = pattern(0, 0, 0);
-const pattern pattern::gray10  = pattern(32, 32, 32);
-const pattern pattern::gray25  = pattern(64, 64, 64);
-const pattern pattern::gray50  = pattern(128, 128, 128);
-const pattern pattern::gray75  = pattern(192, 192, 192);
-const pattern pattern::gray90  = pattern(224, 224, 224);
-const pattern pattern::white   = pattern(255, 255, 255);
-const pattern pattern::invert  = pattern(~0ULL);
-
-// Settings depend on patterns
-settings Settings;
-
-// Runtime must be initialized before ser interface, which contains GC pointers
-runtime::gcptr *runtime::GCSafe;
-runtime rt(nullptr, 0);
-user_interface ui;
-
-uint last_keystroke_time = 0;
-int  last_key            = 0;
-
-RECORDER(main,          16, "Main RPL thread");
-RECORDER(main_error,    16, "Errors in the main RPL thread");
-RECORDER(tests_rpl,    256, "Test request processing on RPL");
-RECORDER(refresh,       16, "Refresh requests");
-
-
-static byte *lcd_buffer = nullptr;
-static uint  row_min    = ~0;
-static uint  row_max    = 0;
-
-void mark_dirty(uint row)
-// ----------------------------------------------------------------------------
-//   Mark a screen range as dirty
-// ----------------------------------------------------------------------------
-{
-    if (row < LCD_H)
-    {
-#ifndef SIMULATOR
-        if (Settings.DMCPDisplayRefresh())
-        {
-            bitblt24(0, 8, row, 0, BLT_XOR, BLT_NONE);
-        }
-        else if (!lcd_buffer[52 * row - 2])
-        {
-            lcd_buffer[52 * row - 2] = 1;
-            lcd_buffer[52 * row] ^= 1;
-            if (row_min > row)
-                row_min = row;
-            if (row_max < row)
-                row_max = row;
-        }
-#endif // SIMULATOR
-    }
+   
+   OS_Start();   // Start embOS
+   return 0;
 }
 
-
-void mark_dirty(int x1, int y1, int x2, int y2)
-// ----------------------------------------------------------------------------
-//   Mark a screen rectangle as dirty
-// ----------------------------------------------------------------------------
-{
-    (void) (x1 + x2);
-    if (y1 > y2)
-        std::swap(y1, y2);
-    if (y1 < 0)
-        y1 = 0;
-    else if (y1 >= LCD_H)
-        y1 = LCD_H - 1;
-    if (y2 < 0)
-        y2 = 0;
-    else if (y2 >= LCD_H)
-        y2 = LCD_H - 1;
-
-    record(refresh, "Refreshing rows %d..%d", y1, y2);
-    for (uint y = uint(y1); y <= uint(y2); y++)
-        mark_dirty(y);
-    record(refresh, "Refreshed  rows %d..%d", y1, y2);
-}
-
-
-void refresh_dirty()
-// ----------------------------------------------------------------------------
-//  Send an LCD refresh request for the area dirtied by drawing
-// ----------------------------------------------------------------------------
-{
-    uint start = sys_current_ms();
-#ifndef SIMULATOR
-    if (ST(STAT_OFF))
-        return;
-
-    if (Settings.DMCPDisplayRefresh())
-    {
-        lcd_refresh();
-    }
-    else
-    {
-        for (uint row = row_min; row <= row_max; row++)
-        {
-            if (lcd_buffer[52 * row - 2])
-            {
-                lcd_buffer[52 * row - 1] = LCD_H - row;
-                LCD_write_line(&lcd_buffer[52 * row - 2]);
-                lcd_buffer[52 * row - 2] = 0;
-            }
-        }
-    }
-#else
-    lcd_refresh();
-#endif
-    row_min = ~0;
-    row_max = 0;
-    program::refresh_time += sys_current_ms() - start;
-}
-
-
-void set_timer(uint timerid, uint period)
-// ----------------------------------------------------------------------------
-//   Conditionally set a timer based on period
-// ----------------------------------------------------------------------------
-{
-    if (period >= 1000)
-    {
-        sys_timer_disable(timerid);
-        if (period >= 60000)
-            CLR_ST(STAT_CLK_WKUP_SECONDS);
-        else
-            SET_ST(STAT_CLK_WKUP_SECONDS);
-    }
-    else
-    {
-        sys_timer_start(timerid, period);
-    }
-}
-
-
-void redraw_lcd(bool force)
-// ----------------------------------------------------------------------------
-//   Redraw the whole LCD
-// ----------------------------------------------------------------------------
-{
-    uint start = sys_current_ms();
-
-    record(main, "Begin redraw at %u", start);
-
-    // Draw the various components handled by the user interface
-    ui.draw_start(force);
-    ui.draw_header();
-    ui.draw_battery();
-    ui.draw_annunciators();
-    ui.draw_menus();
-    if (!ui.draw_help())
-    {
-        ui.draw_editor();
-        ui.draw_cursor(true, ui.cursor_position());
-        ui.draw_stack();
-        if (!ui.draw_stepping_object())
-            ui.draw_command();
-
-    }
-    ui.draw_error();
-
-    // Refresh the screen
-    ui.refresh();
-
-    // Compute next refresh
-    uint end = sys_current_ms();
-    uint period = ui.draw_refresh();
-    record(main,
-           "Refresh at %u (%u later), period %u", end, end - start, period);
-
-    // Refresh screen moving elements after the requested period
-    set_timer(TIMER1, period);
-    program::display_time += end - start;
-}
-
-
-static void redraw_periodics()
-// ----------------------------------------------------------------------------
-//   Redraw the elements that move
-// ----------------------------------------------------------------------------
-{
-    uint start       = program::read_time();
-    uint dawdle_time = start - last_keystroke_time;
-
-    record(main, "Periodics %u", start);
-    ui.draw_start(false);
-    ui.draw_header();
-    ui.draw_battery();
-    if (program::animated())
-    {
-        ui.draw_cursor(false, ui.cursor_position());
-        ui.draw_menus();
-    }
-    ui.refresh();
-
-    // Slow things down if inactive for long enough
-    uint period = ui.draw_refresh();
-    if (!program::animated())
-    {
-        // Adjust refresh time based on time since last interaction
-        // After 10s, update at most every 3s
-        // After 1 minute, update at most every 10s
-        // After 3 minutes, update at most once per minute
-        if (dawdle_time > 180000 && period < 60000)
-            period = 60000;
-        else if (dawdle_time > 60000 && period < 10000)
-            period = 10000;
-        else if (dawdle_time > 10000 && period < 3000)
-            period = 3000;
-    }
-
-    uint end = program::read_time();
-    record(main, "Dawdling for %u at %u after %u", period, end, end-start);
-
-    // Refresh screen moving elements after 0.1s
-    set_timer(TIMER1, period);
-
-    program::display_time += end - start;
-}
-
-
-static void handle_key(int key, bool repeating, bool talpha)
-// ----------------------------------------------------------------------------
-//   Handle all user-interface keys
-// ----------------------------------------------------------------------------
-{
-    sys_timer_disable(TIMER0);
-    bool consumed = ui.key(key, repeating, talpha);
-    if (!consumed)
-        beep(1835, 125);
-
-    // Key repeat timer
-    if (ui.repeating())
-        sys_timer_start(TIMER0, repeating ? 80 : 500);
-}
-
-
-void db48x_set_beep_mute(int val)
-// ----------------------------------------------------------------------------
-//   Set the beep flag (shared with firmware)
-// ----------------------------------------------------------------------------
-{
-    Settings.BeepOff(val);
-    Settings.SilentBeepOn(val);
-}
-
-
-int db48x_is_beep_mute()
-// ----------------------------------------------------------------------------
-//   Check the beep flag from our settings
-// ----------------------------------------------------------------------------
-{
-    return Settings.BeepOff();
-}
-
-
-bool load_saved_keymap(cstring name)
-// ----------------------------------------------------------------------------
-//   Load the default system state file
-// ----------------------------------------------------------------------------
-{
-    bool isdefault = false;
-    char keymap_name[80] = { 0 };
-    if (name)
-    {
-        file kcfg("config/keymap.cfg", file::WRITING);
-        if (kcfg.valid())
-            kcfg.write(name, strlen(name));
-    }
-
-    file kcfg("config/keymap.cfg", file::READING);
-    if (kcfg.valid())
-    {
-        kcfg.read(keymap_name, sizeof(keymap_name)-1);
-        for (size_t i = 0; i < sizeof(keymap_name); i++)
-            if (keymap_name[i] == '\n')
-                keymap_name[i] = 0;
-    }
-    else
-    {
-        strncpy(keymap_name, "config/db48x.48k", sizeof(keymap_name));
-        isdefault = true;
-    }
-
-    // Load default keymap
-    if (!ui.load_keymap(keymap_name))
-    {
-        // Fail silently if we try to load a default file
-        if (isdefault)
-            rt.clear_error();
-        else
-            rt.command(command::static_object(object::ID_KeyMap));
-        return false;
-    }
-    return true;
-}
-
-
-extern uint memory_size;
-void program_init()
-// ----------------------------------------------------------------------------
-//   Initialize the program
-// ----------------------------------------------------------------------------
-{
-    // Setup application menu callbacks
-    run_menu_item_app = menu_item_run;
-    menu_line_str_app = menu_item_description;
-    is_beep_mute = db48x_is_beep_mute;
-    set_beep_mute = db48x_set_beep_mute;
-    lcd_buffer = lcd_line_addr(0);
-
-    // Setup default fonts
-    font_defaults();
-
-#ifndef SIMULATOR
-    // Give as much as memory as possible to the runtime
-    // Experimentally, this is the amount of memory we need to leave free
-    size_t size = sys_free_mem() - 10 * 1024;
-#else
-    // Give 4K bytes to the runtime to stress-test the GC
-    size_t size = 1024 * memory_size;
-#endif
-    byte *memory = (byte *) malloc(size);
-    rt.memory(memory, size);
-
-    // Check if we have a state file to load
-    load_system_state();
-    load_saved_keymap();
-
-    // Enable wakeup each minute (for clock update)
-    SET_ST(STAT_CLK_WKUP_ENABLE);
-}
-
-
-void power_check(bool running, bool showimage)
-// ----------------------------------------------------------------------------
-//   Check power state, keep looping until it's safe to run
-// ----------------------------------------------------------------------------
-// Status flags:
-// ST(STAT_PGM_END)   - Program should go to off state (set by auto off timer)
-// ST(STAT_SUSPENDED) - Program signals it is ready for off
-// ST(STAT_OFF)       - Program in off state (only [EXIT] key can wake it up)
-// ST(STAT_RUNNING)   - OS doesn't sleep in this mode
-{
-    while (true)
-    {
-        // Already in off mode and suspended
-        if ((ST(STAT_PGM_END) && ST(STAT_SUSPENDED)) ||
-            // Go to sleep if no keys available
-            (!ST(STAT_PGM_END) && key_empty()))
-        {
-            CLR_ST(STAT_RUNNING);
-            static uint last_awake = 0;
-            uint tin = sys_current_ms();
-            if (last_awake)
-                program::active_time += tin - last_awake;
-            sys_sleep();
-            uint tout = sys_current_ms();
-            last_awake = tout;
-            program::sleeping_time += tout - tin;
-            program::run_cycles++;
-        }
-        if (ST(STAT_PGM_END) || ST(STAT_SUSPENDED))
-        {
-            // Wakeup in off state or going to sleep
-            if (!ST(STAT_SUSPENDED))
-            {
-                bool lowbat = !program::on_usb && program::low_battery();
-                if (lowbat)
-                {
-                    ui.draw_message("Switched off due to low power",
-                                    "Connect to USB to avoid losing memory",
-                                    "Replace the battery as soon as possible");
-                }
-                else if (ui.showing_graphics())
-                {
-                    // Preserve (most of) the graphics being shown
-                    for (uint i = 0; i < 4; i++)
-                    {
-                        coord x = (i & 1) ? 10 : LCD_W - 11;
-                        coord y = (i & 2) ? 10 : LCD_H - 11;
-                        Screen.circle(x, y, 12, 0, pattern::black);
-                        Screen.circle(x, y,  8, 0, pattern::white);
-                        Screen.circle(x, y,  4, 0, pattern::black);
-                    }
-                    lcd_refresh_wait();
-                }
-                else if (running)
-                {
-                    ui.draw_message("Switched off to conserve battery",
-                                    "Press the ON/EXIT key to resume");
-                }
-                else if (showimage)
-                {
-                    draw_power_off_image(0);
-                }
-                else
-                {
-                    lcd_refresh_wait();
-                }
-
-                sys_critical_start();
-                SET_ST(STAT_SUSPENDED);
-                LCD_power_off(0);
-                sys_timer_disable(TIMER0);
-                sys_timer_disable(TIMER1);
-                SET_ST(STAT_OFF);
-                sys_critical_end();
-            }
-            // Already in OFF -> just continue to sleep above
-        }
-
-        else if (ST(STAT_CLK_WKUP_FLAG))
-        {
-            // Clock wakeup (once per second or per minute)
-            CLR_ST(STAT_CLK_WKUP_FLAG);
-            if (running)
-                break;
-            if (!ui.showing_graphics())
-                redraw_periodics();
-        }
-        else if (ST(STAT_POWER_CHANGE))
-        {
-            // Power state change (to/from USB)
-            CLR_ST(STAT_POWER_CHANGE);
-            sys_timer_disable(TIMER0);
-            sys_timer_disable(TIMER1);
-            // Force reload battery with correct value at next clock refresh.
-            ui.draw_battery(true);
-            program::last_interrupted -= Settings.BatteryRefresh() - 1000;
-        }
-        else
-        {
-            break;
-        }
-    }
-
-    // Well, we are woken-up
-    SET_ST(STAT_RUNNING);
-
-    // Get up from OFF state
-    if (ST(STAT_OFF))
-    {
-        LCD_power_on();
-
-        // Ensure that RTC readings after power off will be OK
-        rtc_wakeup_delay();
-
-        CLR_ST(STAT_OFF);
-
-        // Redraw the LCD content
-        program::read_battery();
-        if (ui.showing_graphics())
-        {
-            ui.show_graphics(false);
-            ui.draw_graphics(false);
-        }
-        else
-        {
-            redraw_lcd(true);
-        }
-    }
-
-    // We definitely reached active state, clear suspended flag
-    CLR_ST(STAT_SUSPENDED);
-}
-
-#ifndef SIMULATOR
-extern const uint prog_build_id;
-extern const uint qspi_build_id;
-#endif
-
-extern "C" void program_main()
-// ----------------------------------------------------------------------------
-//   DMCP main entry point and main loop
-// ----------------------------------------------------------------------------
-{
-    int  key        = 0;
-    bool transalpha = false;
-
-#ifndef SIMULATOR
-    if (prog_build_id != qspi_build_id)
-    {
-        msg_box(t24,
-                "Incompatible " PROGRAM_NAME " build ID\n"
-                "Please reload program and QSPI\n"
-                "from the same build",
-                true);
-        lcd_refresh();
-        wait_for_key_press();
-        return;
-    }
-#endif
-
-    // Initialization
-    program_init();
-    redraw_lcd(true);
-    last_keystroke_time = program::read_time();
-
-    // Main loop
-    while (true)
-    {
-        // Check power state, and switch off if necessary
-        power_check(false);
-
-        // Key is ready -> clear auto off timer
-        bool hadKey = false;
-
-        if (!key_empty())
-        {
-            reset_auto_off();
-            key    = key_pop();
-            hadKey = true;
-            record(main, "Got key %d", key);
-
-#if !WASM
-#if SIMULATOR
-            // Process test-harness commands
-            record(tests_rpl, "Processing key %d, last=%d, command=%u",
-                   key, last_key, test_command);
-            if (key == tests::EXIT_PGM || key == tests::SAVE_PGM)
-            {
-                cstring path = get_reset_state_file();
-                printf("Exit: saving state to %s\n", path);
-                if (path && *path)
-                    save_state_file(path);
-                if (key == tests::EXIT_PGM)
-                    break;
-            }
-#else // Real hardware
-#define read_key __sysfn_read_key
-#endif // SIMULATOR
-#endif // !WASM
-
-            // Check transient alpha mode
-            if (key == KEY_UP || key == KEY_DOWN)
-            {
-                transalpha = true;
-            }
-            else if (transalpha)
-            {
-                int k1, k2;
-                int r = read_key(&k1, &k2);
-                switch (r)
-                {
-                case 0:
-                    transalpha = false;
-                    break;
-                case 1:
-                    transalpha = k1 == KEY_UP || k1 == KEY_DOWN;
-                    break;
-                case 2:
-                    transalpha = k1 == KEY_UP || k1 == KEY_DOWN
-                        ||       k2 == KEY_UP || k2 == KEY_DOWN;
-                    break;
-                }
-            }
-        }
-        bool repeating = key > 0
-            && sys_timer_active(TIMER0)
-            && sys_timer_timeout(TIMER0);
-        if (repeating)
-        {
-            hadKey = true;
-            record(main, "Repeating key %d", key);
-        }
-
-        // Check if we are displaying a graphic image - If so wait for key
-        bool graphics = ui.showing_graphics();
-        if (graphics && hadKey)
-        {
-            if (key > 0)
-            {
-                record(tests_rpl, "Clearing graphics from key %d", key);
-                ui.show_graphics(false);
-                redraw_lcd(true);
-            }
-        }
-
-        // Fetch the key (<0: no key event, >0: key pressed, 0: key released)
-        record(main, "Testing key %d (%+s)", key, hadKey ? "had" : "nope");
-        if (key >= 0 && hadKey)
-        {
-#if SIMULATOR && !WASM
-            if (process_test_key(key))
-                graphics = false;
-#endif // SIMULATOR && !WASM
-
-            if (!graphics)
-            {
-                record(main, "Handle key %d last %d", key, last_key);
-                handle_key(key, repeating, transalpha);
-                record(main, "Did key %d last %d", key, last_key);
-
-                // Redraw the LCD unless there is some type-ahead
-                if (key_empty() && !ui.showing_graphics())
-                    redraw_lcd(false);
-            }
-
-            // Record the last keystroke
-            last_keystroke_time = program::read_time();
-            record(main, "Last keystroke time %u", last_keystroke_time);
-        }
-        else
-        {
-            // Blink the cursor
-            if (!graphics && sys_timer_timeout(TIMER1))
-                redraw_periodics();
-            if (!key)
-                sys_timer_disable(TIMER0);
-        }
-#if SIMULATOR && !WASM
-        if (tests::running && test_command && key_empty())
-            process_test_commands();
-#endif // SIMULATOR && !WASM
-    }
-}
-
-
-#if WASM
-uint            memory_size           = 100;
-bool            noisy_tests           = false;
-bool            no_beep               = false;
-// test_command and tests::running are defined in tests.cc (same as Qt sim).
-
-static void *rpl_thread(void *)
-// ----------------------------------------------------------------------------
-//   Run the RPL thread
-// ----------------------------------------------------------------------------
-{
-    record(main, "Entering main thread");
-    program_main();
-    return nullptr;
-}
-
-
-int ui_init()
-// ----------------------------------------------------------------------------
-//   Initialization for the JavaScript version
-// ----------------------------------------------------------------------------
-{
-    recorder_trace_set(".*error.*|.*warn.*");
-    record(main, "ui_init invoked");
-    pthread_t rpl;
-    int rc = pthread_create(&rpl, nullptr, rpl_thread, nullptr);
-    record(main, "pthread_create returned %d, %s", rc, strerror(rc));
-    return 42;
-}
-
-#endif // WASM
-
-
-
-#if SIMULATOR
-bool process_test_key(int key)
-// ----------------------------------------------------------------------------
-//   Process commands from the test harness
-// ----------------------------------------------------------------------------
-{
-    record(tests_rpl, "Process test key %d, last was %d, command %u",
-           key, last_key, test_command);
-    if (key > 0)
-        last_key = key;
-    else if (last_key > 0)
-        last_key = -last_key;
-    record(tests_rpl, "Set last_key to %d for key %d", last_key, key);
-    return key >= tests::TEST_KEYS;
-}
-
-
-void process_test_commands()
-// ----------------------------------------------------------------------------
-//   Process commands from the test harness
-// ----------------------------------------------------------------------------
-{
-    record(tests_rpl, "Process test command %u with last key %d",
-           test_command, last_key);
-
-    if (test_command == tests::CLEARERR)
-    {
-        record(tests_rpl, "Clearing errors for tests");
-        rt.clear_error();
-    }
-    else if (test_command == tests::CLEAR)
-    {
-        record(tests_rpl, "Clearing editor and stack for tests");
-        rt.clear_error();
-        ui.clear_editor();
-        rt.drop(rt.depth());
-        while (rt.run_next(0));
-        if (ui.showing_graphics())
-        {
-            ui.show_graphics(false);
-            redraw_lcd(true);
-        }
-    }
-    else if (test_command == tests::KEYSYNC)
-    {
-        record(tests_rpl, "Key sync requested");
-    }
-    else if (test_command == tests::START_TEST)
-    {
-        program::read_battery();
-    }
-    if (!ui.showing_graphics())
-        redraw_lcd(true);
-    record(tests_rpl, "Done redrawing LCD after command %u, last=%d",
-           test_command, last_key);
-    test_command = 0;
-}
-#endif // SIMULATOR
