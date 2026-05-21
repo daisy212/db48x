@@ -214,4 +214,7 @@ COMMAND_DECLARE(UIDown,-1);             // Actions related to down key
 COMMAND_DECLARE(UIBackspace,-1);        // Actions related to backspace
 COMMAND_DECLARE(UIDelete,-1);           // Action related to delete
 
+COMMAND_DECLARE(BL_increase,-1);           // Backlight increase
+COMMAND_DECLARE(BL_decrease,-1);           // Backlight decrease
+
 #endif // COMMAND_H

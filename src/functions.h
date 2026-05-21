@@ -355,6 +355,9 @@ NFUNCTION(Max, 2,
 );
 
 
+NFUNCTION(testnfct, 2, );
+
+
 NFUNCTION(Percent, 2, );
 NFUNCTION(PercentChange, 2, );
 NFUNCTION(PercentTotal, 2, );

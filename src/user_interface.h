@@ -367,6 +367,18 @@ inline int user_interface::evaluating_function_key() const
 
 enum { TIMER0, TIMER1, TIMER2, TIMER3 };
 
+
+COMMAND_DECLARE(ToggleB1, 0);
+COMMAND_DECLARE(ToggleB2, 0);
+COMMAND_DECLARE(ToggleC2, 0);
+COMMAND_DECLARE(ToggleD1, 0);
+COMMAND_DECLARE(ToggleD2, 0);
+COMMAND_DECLARE(ToggleD3, 0);
+COMMAND_DECLARE(ToggleE2, 0);
+COMMAND_DECLARE(ToggleF1, 0);
+COMMAND_DECLARE(ToggleE1, 0);
+
+
 extern user_interface ui;
 
 #endif // INPUT_H
