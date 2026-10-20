@@ -58,6 +58,16 @@
 using std::max;
 using std::min;
 
+// Keyboard, toggles functions keys
+uint8_t MemT_Main_Math_Tool;
+uint8_t MemT_Cat_Mem_Lib;
+uint8_t MemT_Prg_Dbg_Mem;
+uint8_t MemT_Trig_Ang_Hypb;
+uint8_t MemT_Base_Numb_Frac;
+uint8_t MemT_Pow_Real_Cplx;
+uint8_t MemT_Solv_Eq_Fin;
+uint8_t MemT_STK_Cte_Parts;
+uint8_t MemT_Unit_Cnv_Cte;
 
 
 // ============================================================================
@@ -124,6 +134,7 @@ void mark_dirty(uint row)
 #endif // SIMULATOR
     }
 }
+
 
 
 void mark_dirty(int x1, int y1, int x2, int y2)
@@ -354,6 +365,8 @@ bool load_saved_keymap(cstring name)
         isdefault = true;
     }
 
+#if  KBD_CASIO_50   == (0)
+
     // Load default keymap
     if (!ui.load_keymap(keymap_name))
     {
@@ -364,6 +377,8 @@ bool load_saved_keymap(cstring name)
             rt.command(command::static_object(object::ID_KeyMap));
         return false;
     }
+
+#endif
     return true;
 }
 

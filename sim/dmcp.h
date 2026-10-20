@@ -746,6 +746,7 @@ int run_menu_item_sys(uint8_t line_id);
 // -------------
 //  Key codes
 // -------------
+#if (KBD_CASIO_50 == 0)
 
 #define KEY_SIGMA  1
 #define KEY_INV    2
@@ -800,7 +801,10 @@ int run_menu_item_sys(uint8_t line_id);
 
 #define KEY_PAGEUP     KEY_DIV
 #define KEY_PAGEDOWN   KEY_MUL
+#define KEY_CAT   KEY_ADD
 
+
+#endif
 
 #define IS_EXIT_KEY(k)  ( (k) == KEY_EXIT || (k) == KEY_BSP )
 

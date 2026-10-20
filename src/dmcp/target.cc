@@ -34,6 +34,7 @@ static const byte dmcp_position[] =
 //   Convert DMCP key codes to row/column positions
 // ----------------------------------------------------------------------------
 {
+#if (KBD_CASIO_50 == 0)
     KB_F1,      11,
     KB_F2,      12,
     KB_F3,      13,
@@ -85,6 +86,72 @@ static const byte dmcp_position[] =
     KB_DOT,     83,
     KB_SPC,     84,
     KB_ADD,     85
+#endif
+#if (KBD_CASIO_50 == 1)
+// functions key A1  A6 : 1  6
+    KB_F1,      11,
+    KB_F2,      12,
+    KB_F3,      13,
+    KB_F4,      14,
+    KB_F5,      15,
+    KB_F6,      16,
+
+    K_B1,       21,
+    K_B2,       22,
+    K_B3,       23,
+    K_B4,       24,
+    K_B5,       25,
+    K_B6,       26,
+
+    K_C1,      31,
+    K_C2,      32,
+    K_C3,      33,
+    K_C4,      34,
+    K_C5,      35,
+    K_C6,      36,
+
+
+    K_D1,      41,
+    K_D2,      42,
+    K_D3,      43,
+    K_D4,      44,
+    K_D5,      45,
+    K_D6,      46,
+
+    K_E1,      51,
+    K_E2,      52,
+    K_E3,      53,
+    K_E4,      54,
+    K_E5,      55,
+    K_E6,      56,
+
+    K_F1,      61,
+    K_F2,      62,
+    K_F3,      63,
+    K_F4,      64,
+    K_F5,      65,
+
+    K_G1,      71,
+    K_G2,      72,
+    K_G3,      73,
+    K_G4,      74,
+    K_G5,      75,
+
+    K_H1,      81,
+    K_H2,      82,
+    K_H3,      83,
+    K_H4,      84,
+    K_H5,      85,
+    
+    K_I1,  //   91
+    K_I2,      92,
+    K_I3,      93,
+    K_I4,      94,
+    K_I5,      95,
+//    K_I5,      95,
+    0, 
+
+#endif
 };
 
 

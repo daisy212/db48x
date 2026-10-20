@@ -682,6 +682,7 @@ MENU(CircularMenu,
      "csc⁻¹",   ID_acsc,
      "cot⁻¹",   ID_acot);
 
+#if (KBD_CASIO_50 == 0)
 MENU(BasesMenu,
 // ----------------------------------------------------------------------------
 //   Operations on based numbers
@@ -739,7 +740,67 @@ MENU(BasesMenu,
      "2-comp",  ID_TwosComplement,
      "Modern",  ID_ModernBasedNumbers,
      ID_TruthLogicForIntegers);
+#endif
 
+#if (KBD_CASIO_50 == 1)
+MENU(BasesMenu,
+// ----------------------------------------------------------------------------
+//   Operations on based numbers
+// ----------------------------------------------------------------------------
+
+     "#",       ID_SelfInsert,
+     "R→B",     ID_RealToBinary,
+     "B→R",     ID_BinaryToReal,
+     Base::label, ID_Base,
+     WordSize::label,  ID_WordSize,
+
+	"CntBits", ID_CountBits,
+     ID_And,
+     ID_Or,
+     ID_Xor,
+     ID_Not,
+
+     "SetBit",  ID_SetBit,
+     ID_NAnd,
+     ID_NOr,
+     ID_Implies,
+     ID_Excludes,
+
+     "SL",      ID_SL,
+     "SR",      ID_SR,
+     "ASR",     ID_ASR,
+     "RL",      ID_RL,
+     "RR",      ID_RR,
+
+     "SLB",     ID_SLB,
+     "SRB",     ID_SRB,
+     "ASRB",    ID_ASRB,
+     "RLB",     ID_RLB,
+     "RRB",     ID_RRB,
+
+     "SLC",     ID_SLC,
+     "SRC",     ID_SRC,
+     "ASRC",    ID_ASRC,
+     "RLC",     ID_RLC,
+     "RRC",     ID_RRC,
+
+     "SetBit",  ID_SetBit,
+     "ClrBit",  ID_ClearBit,
+     "FlipBit", ID_FlipBit,
+     "FstSet",  ID_FirstBitSet,
+     "LstSet",  ID_LastBitSet,
+
+	  Base::label, ID_Base,
+     "Bin",     ID_Bin,
+     "Oct",     ID_Oct,
+     "Dec",     ID_Dec,
+     "Hex",     ID_Hex,
+    
+     "1-comp",  ID_OnesComplement,
+     "2-comp",  ID_TwosComplement,
+     "Modern",  ID_ModernBasedNumbers,
+     ID_TruthLogicForIntegers);
+#endif
 
 MENU(ProbabilitiesMenu,
 // ----------------------------------------------------------------------------
@@ -1431,6 +1492,7 @@ MENU(ClearThingsMenu,
      "Error",   ID_err0,
      "LCD",     ID_ClLCD);
 
+#if (KBD_CASIO_50 == 0)
 MENU(ModesMenu,
 // ----------------------------------------------------------------------------
 //   Mode settings
@@ -1452,6 +1514,90 @@ MENU(ModesMenu,
      "Modes",   ID_Modes,
      "Reset",   ID_ResetModes,
      "System",  ID_SystemSetup);
+#endif
+
+#if (KBD_CASIO_50 == 1)
+ MENU(ModesMenu,
+// ----------------------------------------------------------------------------
+//   Mode settings
+// ----------------------------------------------------------------------------
+     "Display", ID_DisplayModesMenu,
+     "Seps",    ID_SeparatorModesMenu,
+     "Math",    ID_MathModesMenu,
+     "User",    ID_UserModeMenu,
+     "UI",      ID_UserInterfaceModesMenu,
+	"StatusBar",	ID_StatusBarMenu,
+
+	"About",    ID_About_,
+     "Beep",    ID_BeepOn,
+     "Flash",   ID_SilentBeepOn,
+     "Modes",   ID_Modes,
+     "Reset",   ID_ResetModes,
+
+     "DBxxxx",	ID_DBxxxxMenu,
+
+	"System",  ID_SystemSetup);
+#endif
+
+#if (DBxxxx == 1)
+MENU(DBxxxxMenu,
+// ----------------------------------------------------------------------------
+//   DBxxx operations, replace System from DMCP
+// ----------------------------------------------------------------------------
+	PoffTime::label,		ID_PoffTime,
+	BLlevel::label,		ID_BLlevel,
+	BLTime::label,			ID_BLTime,
+	TMzone::label,			ID_TMzone,
+	CpuFreq::label,		ID_CpuFreq,
+	"HardReset",			ID_HardReset,
+// shift
+	"→Time",				ID_SetTime,
+	"→Date",				ID_SetDate,
+	"SetStateName",		ID_SetStateName,
+	"Save",				ID_SaveState,
+	"Merge",				ID_MergeState,
+	"Load",				ID_LoadState,
+// 2nd shift
+	"Voltage",			ID_BatteryVoltage,
+	"Temp",				ID_Temp
+
+);
+#else
+MENU(DBxxxxMenu,
+	PoffTime::label,		ID_PoffTime,
+	BLlevel::label,		ID_BLlevel,
+	BLTime::label,			ID_BLTime,
+	TMzone::label,			ID_TMzone,
+	CpuFreq::label,		ID_CpuFreq,
+	"HardReset",			ID_Unimplemented,
+// shift
+	"→Time",				ID_SetTime,
+	"→Date",				ID_SetDate,
+	"SetStateName",		ID_Unimplemented,
+	"Save",				ID_SaveState,
+	"Merge",				ID_Unimplemented,
+	"Load",				ID_Unimplemented,
+// 2nd shift
+	"Voltage",			ID_BatteryVoltage,
+	"Temp",				ID_Unimplemented
+);
+#endif
+
+MENU(StatusBarMenu,
+	"ShowDate",		ID_HideDate,
+	"DayWeek",		ID_HideDayOfWeek,
+	"MonthName",		ID_HideMonthName,
+	"ShowTime",		ID_HideTime,
+	"Seconds",		ID_HideSeconds,
+	"24h",			ID_Time12H,
+	"Date Sep _",		ID_DateSpace,
+	"Date Sep -",		ID_DateDash,
+	"Date Sep .",		ID_DateDot,
+	"Date Sep /",		ID_DateSlash,
+	"FirstYear",		ID_YearFirst,
+	"FirstMonth",		ID_MonthBeforeDay,
+	"Volt",			ID_ShowVoltage
+);
 
 MENU(DisplayModesMenu,
 // ----------------------------------------------------------------------------

@@ -1085,4 +1085,5 @@ object::result run()
     return RPL::do_evaluate(obj);
 }
 
+
 #endif // OBJECT_H

@@ -1780,3 +1780,12 @@ COMMAND_BODY(UIDelete)
 {
     return ui.do_delete(true) ? OK : ERROR;
 }
+
+
+// [DBxxxx, About]  replace Setup, 2. About
+void about_dialog();
+COMMAND_BODY(About_){
+	about_dialog();
+    redraw_lcd(true);
+	return OK;
+}

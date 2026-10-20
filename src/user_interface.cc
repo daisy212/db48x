@@ -659,7 +659,7 @@ bool user_interface::key(int key, bool repeating, bool talpha)
         {
             if (key == KEY_EXIT || key == KEY_ENTER || key == KEY_BSP)
                 rt.clear_error();
-            else if (key == KEY_SHIFT)
+            else if (key == KEY_SHIFT || key == KEY_SHIFT2)
                 handle_shifts(key, talpha);
             else if (key)
                 beep(2200, 75);
@@ -668,6 +668,43 @@ bool user_interface::key(int key, bool repeating, bool talpha)
             return true;
         }
     }
+    #if (KBD_CASIO_50 == 1)
+    if (( key != K_Cat_Mem_Lib)
+        &&( key != 0))
+            MemT_Cat_Mem_Lib = 0;
+      
+	  if (( key != K_Main_Math_Tool)
+        &&( key != 0))
+            MemT_Main_Math_Tool = 0;
+
+    if (( key != K_Prg_Dbg_Mem)
+        &&( key != 0))
+            MemT_Prg_Dbg_Mem = 0;
+
+    if (( key != K_Trig_Ang_Hypb)
+        &&( key != 0))
+            MemT_Trig_Ang_Hypb = 0;
+
+    if (( key != K_Base_Numb_Frac)
+        &&( key != 0))
+            MemT_Base_Numb_Frac = 0;
+    
+    if (( key != K_Pow_Real_Cplx)
+        &&( key != 0))
+            MemT_Pow_Real_Cplx = 0;
+
+    if (( key != K_STK_Cte_Parts)
+        &&( key != 0))
+            MemT_STK_Cte_Parts = 0;
+
+    if (( key != K_Unit_Cnv_Cte)
+        &&( key != 0))
+            MemT_Unit_Cnv_Cte = 0;      
+
+    if (( key != K_Solv_Eq_Fin)
+        &&( key != 0))  
+            MemT_Solv_Eq_Fin = 0;
+    #endif
 
     // Handle keys
     bool result =
@@ -683,11 +720,23 @@ bool user_interface::key(int key, bool repeating, bool talpha)
     if (rt.editing())
         update_mode();
 
-    if (!skey && last != KEY_SHIFT && !transalpha)
-    {
-        shift = false;
-        xshift = false;
-    }
+    #if (KBD_CASIO_50 == 0)
+        if (!skey && last != KEY_SHIFT && !transalpha)
+        {
+            shift = false;
+            xshift = false;
+        }
+    #else
+        if (!skey && last != KEY_SHIFT && !transalpha)
+        {
+            shift = false;
+        }
+        if (!skey && (last != KEY_SHIFT2) && !transalpha)
+        {
+            if (last != KEY_SHIFT)
+                xshift = false;
+        }
+    #endif
 
     if (!skey)
         command = nullptr;
@@ -4810,6 +4859,7 @@ bool user_interface::noHelpForKey(int key)
     {
         // No help for ENTER, BSP, UP, DOWN and RUN keys while editing
         if (key == KEY_ENTER || key == KEY_BSP ||
+            key == KEY_LEFT || key == KEY_RIGHT || 
             key == KEY_UP || key == KEY_DOWN || key == KEY_RUN)
             return true;
 
@@ -4824,16 +4874,28 @@ bool user_interface::noHelpForKey(int key)
         // Show help for Negate and Cycle only if not editing
         if (key == KEY_CHS || key == KEY_E)
             return editing;
-
-        if (key > KEY_SWAP && key < KEY_ADD &&
-            key != KEY_SUB && key != KEY_MUL && key != KEY_DIV && key != KEY_RUN)
-            return true;
+        #if (KBD_CASIO_50 == 0)
+            if (key > KEY_SWAP && key < KEY_ADD &&
+               key != KEY_SUB && key != KEY_MUL && key != KEY_DIV && key != KEY_RUN)
+                return true;
+        #else
+            if (key == KEY_7 || key == KEY_8 || key == KEY_9 || 
+                key == KEY_4 || key == KEY_5 || key == KEY_6 || 
+                key == KEY_1 || key == KEY_2 || key == KEY_3 || 
+                key == KEY_0 )
+                return true;
+        #endif
     }
 
-    // No help for shifted UP/DOWN (history, edit, etc)
-    if (key == KEY_UP || key == KEY_DOWN)
-        return true;
 
+    // No help for shifted UP/DOWN (history, edit, etc)
+    #if (KBD_CASIO_50 == 0)
+        if (key == KEY_UP || key == KEY_DOWN)
+            return true;
+    #else
+        if (key == KEY_UP || key == KEY_DOWN || key == KEY_LEFT || key == KEY_RIGHT )
+            return true;
+    #endif
     // Other cases are regular functions, we can display help
     return false;
 }
@@ -4877,9 +4939,13 @@ bool user_interface::handle_help(int &key)
     if (!showing_help())
     {
         // Exit if we are editing or entering digits
-        if (last == KEY_SHIFT || Stack.interactive)
-            return false;
-
+        #if (KBD_CASIO_50 == 0)
+            if (last == KEY_SHIFT || Stack.interactive)
+                return false;
+        #else
+            if (last == KEY_SHIFT || last == KEY_SHIFT2 || Stack.interactive)
+                return false;
+        #endif
         // Check if we have a long press, if so load corresponding help
         if (key)
         {
@@ -5131,37 +5197,45 @@ bool user_interface::handle_shifts(int &key, bool talpha)
     }
 
 
-    if (key == KEY_SHIFT)
+    if (key == KEY_SHIFT || key == KEY_SHIFT2)
     {
         if (longpress)
         {
-            if (alpha)
-                alpha = lowercase = false;
-            else
-                alpha = true;
-            shift = false;
+            #if (KBD_CASIO_50 == 0)
+                if (alpha)
+                    alpha = lowercase = false;
+                else
+                    alpha = true;
+                shift = false;
+                xshift = false;
+            #endif
+        }
+        else if (xshift)
+        {
             xshift = false;
         }
         else
-        {
-            if (xshift)
+        {            
+            if (key == KEY_SHIFT )
             {
-                xshift = false;
+                xshift = shift == 1 ? 1 : 0;
+                shift = shift == 1 ? 0 : 1;
             }
-            else if (shift)
+            if (key == KEY_SHIFT2)
             {
-                shift = false;
-                xshift = true;
+                shift = 0;
+                xshift = xshift == 1 ? 0 :1;
             }
-            else
-            {
-                shift = true;
-            }
+            
             repeat = true;
         }
         consumed = true;
     }
-    else if (shift && key == KEY_ENTER)
+    #if (KBD_CASIO_50 == 1)
+        else if (!xshift && !shift && key == KEY_ALPHA)
+    #else
+        else if (shift && key == KEY_ENTER)
+    #endif
     {
         // Cycle ABC -> abc -> non alpha
         if (alpha)
@@ -5486,8 +5560,13 @@ bool user_interface::handle_editing(int key)
                 // Shift R/S = PRGM enters a program symbol
                 if (isEditing && (mode == ALGEBRAIC || mode == PARENTHESES))
                     insert('=', ALGEBRAIC);
+                #if (KBD_CASIO_50 == 0)
                 else
                     insert(L'«', PROGRAM);
+                #else
+                dirtyStack = true;
+                return false;
+                #endif
                 last = 0;
                 return true;
             }
@@ -5568,20 +5647,50 @@ bool user_interface::handle_editing(int key)
                 return false;
 
             return do_exit();
+        #if (KBD_CASIO_50 == 1)
+            case KEY_LEFT:
+                // during editing, shift Left => PreviousMenu
+                if (shift)
+                    return false;
+                if (xshift)
+                    return false;
+                return do_left();
 
-        case KEY_UP:
-            if (shift)
+            case KEY_RIGHT:
+            // during editing, shift Right => CharMenu
+                if (shift)
+                    return false;
+                if (xshift)
+                    return false;
+                return do_right();
+            case KEY_UP:
+                if (shift)
+                    return editor_history();
+                if (xshift)
+                    return false;
                 return do_up();
-            if (xshift)
-                return editor_history();
-            return do_left();
 
-        case KEY_DOWN:
-            if (shift)
+            case KEY_DOWN:
+                if (shift)
+                    return false;
+                if (xshift)
+                    return false;
                 return do_down();
-            if (xshift)
-                return false;
-            return do_right();
+        #else
+            case KEY_UP:
+                if (shift)
+                    return do_up();
+                if (xshift)
+                    return editor_history();
+                return do_left();
+
+            case KEY_DOWN:
+                if (shift)
+                    return do_down();
+                if (xshift)
+                    return false;
+                return do_right();
+        #endif
         case 0:
             return false;
         }
@@ -5680,6 +5789,66 @@ bool user_interface::handle_alpha(int key)
     if (!alpha && !hex && !special)
         return false;
 
+    #if (KBD_CASIO_50 == 1)
+    static const char upper[] =
+        "______"        // ligne b1-b6
+        "______"
+        "ABCDEF"
+        "GHIJKL"
+        "MNO__"
+        "PQRST"
+        "UVWXY"
+        "Z,:; "         // ligne i1 i6
+        "______"        // ligne a1 a6
+        ;
+    static const char lower[] =
+        "______"        // ligne b1-b6
+        "______"
+        "abcdef"
+        "ghijkl"
+        "mno__"
+        "pqrst"
+        "uvwxy"
+        "z.:; "
+        "______";
+
+    static const unicode shifted[] =
+    {
+        L'←', L'↓','_', L'→', L'↑', '_', // ligne b1-b6
+        '_',  '_', '_', '_', '_', '_', 
+
+        L'Σ', '^', L'√', L'∂', L'σ', L'▶',
+        '(', 'd',  L'⇄', L'±', L'∡', 'd',
+        '7', '8', '9','_', '\n', 
+        '4', '5', '6', L'×',L'÷',
+          '1', '2', '3', '+', '-',
+        '0', '.', '_', L'±', ' '
+    };
+
+    static const  unicode xshifted[] =
+    {
+        L'≤', L'μ', '_', L'≥', L'≠', '\'', // ligne b1-b6
+        L'∏', 'd', L'↑', L'μ', L'θ', '\'',
+
+        L'∏', L'∆', L'°', L'μ', L'θ', 'd',
+        '\'', ')', '~', L'%', L'ε', '\n',
+        L'Ω',  '?', L'∫',   '[',  '/',
+        L'€',  '#',  L'∞', '|' , '*',
+        '_', '&',   '@', '$',  L'…',
+        ';',  L'·', '{',  '!',
+        L'→', L'←', L'↓', L'≤', L'≠', L'≥', '_'
+    };
+    // Special case: [CAT] / + in alpha mode shows the catalog
+    //  KBD_CASIO_50 has a dedicated catalog key, for DM keybard KEY_CAT is defined with KEY_PLUS in dmcp.h
+
+    if (key == KEY_CAT && !shift && !xshift)
+    {
+        object_p cat = command::static_object(menu::ID_Catalog);
+        cat->evaluate();
+        return true;
+    }
+#else
+    
     static const char upper[] =
         "ABCDEF"
         "GHIJKL"
@@ -5718,14 +5887,17 @@ bool user_interface::handle_alpha(int key)
         '_',  '&',   '@', '$',  L'…',
         '_',  ';',  L'·', '{',  '!'
     };
+    // Special case: [CAT] / + in alpha mode shows the catalog
+    //  KBD_CASIO_50 has a dedicated catalog key, for DM keybard KEY_CAT is defined with KEY_PLUS in dmcp.h
 
-    // Special case: + in alpha mode shows the catalog
     if (key == KEY_ADD && !shift && !xshift)
     {
         object_p cat = command::static_object(menu::ID_Catalog);
         cat->evaluate();
         return true;
     }
+#endif
+
 
     key--;
     unicode c =
@@ -5779,14 +5951,29 @@ bool user_interface::handle_digits(int key)
     if (alpha || shift || xshift || !key)
         return false;
 
-    static const char numbers[] =
-        "______"
-        "______"
-        "__-__"
-        "_789_"
-        "_456_"
-        "_123_"
-        "_0.__";
+
+    #if (KBD_CASIO_50 == 1)
+        static const char numbers[] =
+            "______"
+            "______"
+            "______"
+            "______"
+            "789__"
+            "456__"
+            "123__"
+            "0.___";
+    #else
+        static const char numbers[] =
+            "______"
+            "______"
+            "__-__"
+            "_789_"
+            "_456_"
+            "_123_"
+            "_0.__";
+
+   #endif
+
 
     if (rt.editing())
     {
@@ -6035,7 +6222,11 @@ bool user_interface::handle_digits(int key)
             return true;
         }
     }
+#if (KBD_CASIO_50 == 1)
+    if (key > K_E6 && key < KEY_F1)
+#else
     if (key > KEY_CHS && key < KEY_F1)
+#endif
     {
         unicode c = numbers[key - 1];
         if (~searching)
@@ -6088,7 +6279,7 @@ static const byte defaultUnshiftedCommand[2*user_interface::NUM_KEYS] =
 #define OP2BYTES(key, id)                                              \
     [2*(key) - 2] = (id) < 0x80 ? (id) & 0x7F : ((id) & 0x7F) | 0x80,  \
     [2*(key) - 1] = (id) < 0x80 ?           0 : ((id) >> 7)
-
+ #if KBD_CASIO_50   == (0)
     OP2BYTES(KEY_SIGMA, menu::ID_ToolsMenu),
     OP2BYTES(KEY_INV,   function::ID_inv),
     OP2BYTES(KEY_SQRT,  function::ID_sqrt),
@@ -6137,6 +6328,72 @@ static const byte defaultUnshiftedCommand[2*user_interface::NUM_KEYS] =
     OP2BYTES(KEY_SCREENSHOT, command::ID_ScreenCapture),
     OP2BYTES(KEY_SH_UP,  0),
     OP2BYTES(KEY_SH_DOWN, 0),
+#endif
+#if KBD_CASIO_50   == (1)
+    OP2BYTES(K_B1,	    0),                                 // shift
+    OP2BYTES(K_B2,	    command::ID_Sto),					// sto
+    OP2BYTES(K_B3,	    command::ID_ToggleCustomMenu),      // var
+    OP2BYTES(K_B4,	    0),                                 // shift2
+    OP2BYTES(K_B5,	    menu::ID_LastMenu),                 // left
+    OP2BYTES(K_B6,	    0),                                 // up
+
+    OP2BYTES(K_C1,		0),                                 // alpha
+    OP2BYTES(K_C2,		command::ID_Main_Math_Tool),        // quick menu
+    OP2BYTES(K_C3,		command::ID_Cat_Mem_Lib),         // catalog
+    OP2BYTES(K_C4,		0),                                 // exit
+    OP2BYTES(K_C5,		0),                                 // down
+    OP2BYTES(K_C6,		menu::ID_CharactersMenu),           // right
+
+    OP2BYTES(K_D1,		command::ID_Trig_Ang_Hypb),         // trig
+    OP2BYTES(K_D2,		command::ID_Base_Numb_Frac),        // base
+    OP2BYTES(K_D3,		command::ID_Pow_Real_Cplx),         // Pow
+    OP2BYTES(K_D4,		function::ID_sqrt),                 // sqrt
+    OP2BYTES(K_D5,		function::ID_pow),                  // power
+    OP2BYTES(K_D6,		function::ID_inv),                  // 1/x
+
+    OP2BYTES(K_E1,		command::ID_Unit_Cnv_Cte),          // unit
+    OP2BYTES(K_E2,		command::ID_Solv_Eq_Fin),           // solv
+    OP2BYTES(K_E3,		command::ID_Prg_Dbg_Mem),           // prg
+    OP2BYTES(K_E4,		command::ID_STK_Cte_Parts),         // stk
+    OP2BYTES(K_E5,		function::ID_Swap),                 // x<>y
+    OP2BYTES(K_E6,		command::ID_UIAlgebraic),           // '()
+
+    OP2BYTES(K_F1,		0),                                 // 7
+    OP2BYTES(K_F2,		0),                                 // 8
+    OP2BYTES(K_F3,		0),                                 // 9
+    OP2BYTES(K_F4,		command::ID_Drop),                  // <--
+    OP2BYTES(K_F5,		function::ID_Dup),                  // enter
+
+    OP2BYTES(K_G1,		0),                                 // 4 
+    OP2BYTES(K_G2,		0),                                 // 5
+    OP2BYTES(K_G3,		0),                                 // 6
+    OP2BYTES(K_G4,		arithmetic::ID_multiply),           // x
+    OP2BYTES(K_G5,		arithmetic::ID_divide),             // /
+
+    OP2BYTES(K_H1,		0),                                 // 1
+    OP2BYTES(K_H2,		0),                                 // 2
+    OP2BYTES(K_H3,		0),                                 // 3
+    OP2BYTES(K_H4,		command::ID_add),                   // +
+    OP2BYTES(K_H5,		command::ID_subtract),              // -
+
+    OP2BYTES(K_I1,		0),                                 // 0
+    OP2BYTES(K_I2,		0),                                 // . 
+    OP2BYTES(K_I3,		function::ID_Cycle),                // 10^x
+    OP2BYTES(K_I4,		function::ID_neg),                  // chs
+    OP2BYTES(K_I5,		command::ID_Run),                   // run, spc, =
+
+    OP2BYTES(K_A1,		0),                                 // F1
+    OP2BYTES(K_A2,		0),                                 // F2
+    OP2BYTES(K_A3,		0),                                 // F3
+    OP2BYTES(K_A4,		0),                                 // F4
+    OP2BYTES(K_A5,		0),                                 // F5
+    OP2BYTES(K_A6,		0),                                 // F6
+
+    OP2BYTES(KEY_SCREENSHOT, command::ID_ScreenCapture),
+    OP2BYTES(KEY_SH_UP,  0),
+    OP2BYTES(KEY_SH_DOWN, 0),
+
+#endif
 };
 
 
@@ -6146,6 +6403,7 @@ static const byte defaultShiftedCommand[2*user_interface::NUM_KEYS] =
 // ----------------------------------------------------------------------------
 //   All the default assigned commands fit in one or two bytes
 {
+ #if KBD_CASIO_50   == (0)
     OP2BYTES(KEY_SIGMA, menu::ID_LastMenu),
     OP2BYTES(KEY_INV,   arithmetic::ID_exp),
     OP2BYTES(KEY_SQRT,  arithmetic::ID_sq),
@@ -6194,6 +6452,72 @@ static const byte defaultShiftedCommand[2*user_interface::NUM_KEYS] =
     OP2BYTES(KEY_SCREENSHOT, command::ID_ScreenCapture),
     OP2BYTES(KEY_SH_UP, 0),
     OP2BYTES(KEY_SH_DOWN, 0),
+#endif
+ #if KBD_CASIO_50   == (1)
+    OP2BYTES(K_B1,		0),                                 // shift
+	OP2BYTES(K_B2,		menu::ID_FilesMenu ),				// files menu
+    OP2BYTES(K_B3,		command::ID_UpDir),			        // current path
+    OP2BYTES(K_B4,		0),                                 // shift2
+    OP2BYTES(K_B5,		menu::ID_LastMenu),                 // left     , last menu
+    OP2BYTES(K_B6,		command::ID_EditorHistory),         // up       , hist
+
+    OP2BYTES(K_C1,		command::ID_ToggleUserMode),        // alpha      , usr
+    OP2BYTES(K_C2,		menu::ID_MainMenu),                 // quick menu , main
+    OP2BYTES(K_C3,		command::ID_MemoryMenu),            // catalog    , mem, lib
+    OP2BYTES(K_C4,		command::ID_OffWithImage),          // exit       , off
+    OP2BYTES(K_C5,		menu::ID_EditMenu),					// down       , edit
+    OP2BYTES(K_C6,		menu::ID_CharactersMenu),           // right      , char
+
+    OP2BYTES(K_D1,		menu::ID_AnglesMenu),               // trig       , angles
+    OP2BYTES(K_D2,		menu::ID_NumbersMenu),              // base       , numbers, frac
+    OP2BYTES(K_D3,		menu::ID_RealMenu),                 // Pow        , real    , complex
+    OP2BYTES(K_D4,		function::ID_Pi),
+    OP2BYTES(K_D5,		function::ID_xroot),
+    OP2BYTES(K_D6,		function::ID_exp),                  // 1/x        , e^x
+
+	OP2BYTES(K_E1,		menu::ID_UnitsConversionsMenu),     // unit   , conv
+    OP2BYTES(K_E2,		menu::ID_EquationsMenu),            // solv   , equations
+    OP2BYTES(K_E3,		menu::ID_DebugMenu),				// prg    , debug
+
+    OP2BYTES(K_E4,		menu::ID_PartsMenu),	             // stk   , Parts
+    OP2BYTES(K_E5,		function::ID_LastArg),               // x<>y  , lastx
+    OP2BYTES(K_E6,		command::ID_ToDecimal),              // '()   , >num
+
+    OP2BYTES(K_F1,		menu::ID_IntegrationMenu),           // 7      , Dx
+    OP2BYTES(K_F2,		menu::ID_PlotMenu),                  // 8      , Plot
+    OP2BYTES(K_F3,		menu::ID_GraphicsMenu),              // 9      , Grph
+    OP2BYTES(K_F4,		menu::ID_Undo),                      // <--    , undo
+    OP2BYTES(K_F5,		menu::ID_UIText),                    // enter
+
+    OP2BYTES(K_G1,		menu::ID_TextMenu),                  // 4     , text
+    OP2BYTES(K_G2,		menu::ID_TimeMenu),                  // 5     , time
+    OP2BYTES(K_G3,		menu::ID_StatisticsMenu),            // 6     , stat
+    OP2BYTES(K_G4,		menu::ID_ProbabilitiesMenu),         // x     , prob
+    OP2BYTES(K_G5,		menu::ID_FinanceSolverMenu ),        // /     , fin
+
+    OP2BYTES(K_H1,		menu::ID_ModesMenu),				 // 1     , mode
+    OP2BYTES(K_H2,		menu::ID_SymbolicMenu),              // 2     , symb
+    OP2BYTES(K_H3,		menu::ID_AlgebraMenu),               // 3     , algb
+    OP2BYTES(K_H4,		menu::ID_PolynomialsMenu),           // +     , poly
+    OP2BYTES(K_H5,		menu::ID_ObjectMenu),                // -     , object
+ 
+    OP2BYTES(K_I1,		menu::ID_MatrixMenu),                // 0      , matrix
+    OP2BYTES(K_I2,		menu::ID_ListMenu),                  // .      , list
+    OP2BYTES(K_I3,		command::ID_Show),                   // 10^x   , show
+    OP2BYTES(K_I4,		menu::ID_RangeMenu),                 // chs    , range
+    OP2BYTES(K_I5,		menu::ID_Help),				        // run    ,spc, =, help
+
+    OP2BYTES(K_A1,		0),									 // F1
+    OP2BYTES(K_A2,		0),									 // F2
+    OP2BYTES(K_A3,		0),									 // F3
+    OP2BYTES(K_A4,		0),									 // F4
+    OP2BYTES(K_A5,		0),									 // F5
+    OP2BYTES(K_A6,		0),									 // F6
+
+    OP2BYTES(KEY_SCREENSHOT, command::ID_ScreenCapture),
+    OP2BYTES(KEY_SH_UP, 0),
+    OP2BYTES(KEY_SH_DOWN, 0),
+#endif
 };
 
 
@@ -6203,6 +6527,7 @@ static const byte defaultSecondShiftedCommand[2*user_interface::NUM_KEYS] =
 // ----------------------------------------------------------------------------
 //   All the default assigned commands fit in one or two bytes
 {
+ #if KBD_CASIO_50   == (0)
     OP2BYTES(KEY_SIGMA, menu::ID_MainMenu),
     OP2BYTES(KEY_INV,   command::ID_ln),
     OP2BYTES(KEY_SQRT,  menu::ID_xroot),
@@ -6251,6 +6576,76 @@ static const byte defaultSecondShiftedCommand[2*user_interface::NUM_KEYS] =
     OP2BYTES(KEY_SCREENSHOT, command::ID_ScreenCapture),
     OP2BYTES(KEY_SH_UP, 0),
     OP2BYTES(KEY_SH_DOWN, 0),
+#endif
+ #if KBD_CASIO_50 == (1)
+    OP2BYTES(K_B1,      0  ),                                // shift
+    OP2BYTES(K_B2,      menu::ID_IOMenu),                    // STO    , mem   , io
+    OP2BYTES(K_B3,      command::ID_Path),                   // var      , up   , path
+    OP2BYTES(K_B4,      0),                                  // shift2
+    OP2BYTES(K_B5,      0),                                  //left      , last menu
+    OP2BYTES(K_B6,      0),                                  // up       , hist    , (system)
+
+    OP2BYTES(K_C1,      0),                                  // alpha      , usr
+    OP2BYTES(K_C2,      menu::ID_MathMenu),                  // quick menu , main    , math
+    OP2BYTES(K_C3,      command::ID_Library ),              // catalog    , Mem      , lib
+    OP2BYTES(K_C4,      menu::ID_SaveState),
+    OP2BYTES(K_C5,      0),                                  // down       , edit    , (show)
+    OP2BYTES(K_C6,      0),                                  // right      , char    , (xxx)
+
+    OP2BYTES(K_D1,      menu::ID_HyperbolicMenu),
+    OP2BYTES(K_D2,      menu::ID_FractionsMenu),
+    OP2BYTES(K_D3,      menu::ID_ComplexMenu),
+    OP2BYTES(K_D4,      function::ID_sq),                    // sqrt       , ^2
+    OP2BYTES(K_D5,      function::ID_abs),                   // power      , abs
+    OP2BYTES(K_D6,      function::ID_ln),
+
+    OP2BYTES(K_E1,      menu::ID_ConstantsMenu),
+    OP2BYTES(K_E2,      menu::ID_FinanceSolverMenu),         // Alpha
+    OP2BYTES(K_E3,      command::ID_MemoryMenu),             // Alpha
+    OP2BYTES(K_E4,      0),                                  // prg        , debug   , memory
+    OP2BYTES(K_E5,      function::ID_Undo),
+    OP2BYTES(K_E6,      menu::ID_NumbersMenu),
+
+    OP2BYTES(K_F1,		0),
+    OP2BYTES(K_F2,		0),
+    OP2BYTES(K_F3,		0),
+    OP2BYTES(K_F4,		menu::ID_ClearThingsMenu),           // <--    , undo,  delmenu
+    OP2BYTES(K_F5,		0),           // Text
+
+    OP2BYTES(K_G1,		menu::ID_TextMenu),
+    OP2BYTES(K_G2,		menu::ID_UnitsConversionsMenu),
+    OP2BYTES(K_G3,		menu::ID_TimeMenu),
+    OP2BYTES(K_G4,		menu::ID_NumbersMenu),
+    OP2BYTES(K_G5,		menu::ID_NumbersMenu),
+
+#if (DBxxx)
+    OP2BYTES(K_H1,		menu::ID_DBxxxxMenu),
+#else
+    OP2BYTES(K_H1,		0), 
+#endif
+    OP2BYTES(K_H2,		0),
+    OP2BYTES(K_H3,		0),
+    OP2BYTES(K_H4,		0),
+    OP2BYTES(K_H5,		0),
+
+    OP2BYTES(K_I1,		0),
+    OP2BYTES(K_I2,		0),
+    OP2BYTES(K_I3,		0),
+    OP2BYTES(K_I4,		0),
+    OP2BYTES(K_I5,		0),
+
+    OP2BYTES(K_A1,		0),                                   // F1
+    OP2BYTES(K_A2,		0),                                   // F2
+    OP2BYTES(K_A3,		0),                                   // F3
+    OP2BYTES(K_A4,		0),                                   // F4
+    OP2BYTES(K_A5,		0),                                   // F5
+    OP2BYTES(K_A6,		0),                                   // F6
+
+    OP2BYTES(KEY_SCREENSHOT, command::ID_ScreenCapture),
+    OP2BYTES(KEY_SH_UP, 0),
+    OP2BYTES(KEY_SH_DOWN, 0),
+#endif
+
 };
 
 
@@ -7662,3 +8057,284 @@ void debug_wait(int delay)
     else if (delay < 0)
         wait_for_key_press();
 }
+
+
+// Toggle C2
+COMMAND_BODY(Main_Math_Tool)
+{
+   if (menu_p m = ui.menu())
+   {
+      if (m->type() == ID_MainMenu)
+         MemT_Main_Math_Tool = 2;
+      else if  (m->type() == ID_MathMenu)
+         MemT_Main_Math_Tool = 0;
+      else if  (m->type() == ID_ToolsMenu)
+         MemT_Main_Math_Tool = 1;
+   }
+
+   if (MemT_Main_Math_Tool == 0)
+   {      
+      MemT_Main_Math_Tool = 1;
+      return run<ToolsMenu>();
+   }
+   if (MemT_Main_Math_Tool == 1)
+   {      
+      MemT_Main_Math_Tool = 2;
+      return run<MainMenu>();
+   }
+   if (MemT_Main_Math_Tool == 2)
+   {      
+      MemT_Main_Math_Tool = 0;
+      return run<MathMenu>();
+   }
+   return OK;
+}
+
+// Toggle C3
+COMMAND_BODY(Cat_Mem_Lib)
+{
+   if (menu_p m = ui.menu())
+   {
+      if (m->type() == ID_MemoryMenu)
+         MemT_Cat_Mem_Lib = 2;
+      else if  (m->type() == ID_Library)
+         MemT_Cat_Mem_Lib = 0;
+      else if  (m->type() == ID_Catalog )
+         MemT_Cat_Mem_Lib = 1;
+   }
+
+   if (MemT_Cat_Mem_Lib == 0)
+   {      
+      MemT_Cat_Mem_Lib = 1;
+      object_p cat = command::static_object(menu::ID_Catalog);
+      cat->evaluate();
+      return OK;
+
+   }
+   if (MemT_Cat_Mem_Lib == 1)
+   {      
+      MemT_Cat_Mem_Lib = 2;
+      return run<MemoryMenu>();
+   }
+   if (MemT_Cat_Mem_Lib == 2)
+   {      
+      MemT_Cat_Mem_Lib = 0;
+      return run<Library>();
+   }
+   return OK;
+
+}
+
+// ToggleC2
+COMMAND_BODY(Prg_Dbg_Mem)
+{
+   if (menu_p m = ui.menu())
+   {
+      if (m->type() == ID_MemoryMenu)
+         MemT_Prg_Dbg_Mem = 0;
+      else if  (m->type() == ID_DebugMenu)
+         MemT_Prg_Dbg_Mem = 2;
+      else if  (m->type() == ID_ProgramMenu)
+         MemT_Prg_Dbg_Mem = 1;
+   }
+   if (MemT_Prg_Dbg_Mem == 0)
+   {      
+      MemT_Prg_Dbg_Mem = 1;
+      return run<ProgramMenu>();
+   }
+   if (MemT_Prg_Dbg_Mem == 1)
+   {      
+      MemT_Prg_Dbg_Mem = 2;
+      return run<DebugMenu>();
+   }
+   if (MemT_Prg_Dbg_Mem == 2)
+   {      
+      MemT_Prg_Dbg_Mem = 0;
+      return run<MemoryMenu>();
+   }
+   return OK;
+
+}
+
+// ToggleE2
+COMMAND_BODY(STK_Cte_Parts)
+{
+   if (menu_p m = ui.menu())
+   {
+      if (m->type() == ID_StackMenu)
+         MemT_STK_Cte_Parts = 1;
+      else if  (m->type() == ID_ConstantsMenu)
+         MemT_STK_Cte_Parts = 2;
+      else if  (m->type() == ID_PartsMenu)
+         MemT_STK_Cte_Parts = 0;
+   }
+   if (MemT_STK_Cte_Parts == 0)
+   {
+      MemT_STK_Cte_Parts = 1;
+      return run<StackMenu>();
+   }
+   if (MemT_STK_Cte_Parts == 1)
+   {
+      MemT_STK_Cte_Parts = 2;
+      return run<ConstantsMenu>();
+   }
+   if (MemT_STK_Cte_Parts == 2)
+   {
+      MemT_STK_Cte_Parts = 0;
+      return run<PartsMenu>();
+   }
+   return OK;
+}
+
+// ToggleE1
+COMMAND_BODY(Solv_Eq_Fin)
+{
+   if (menu_p m = ui.menu())
+   {
+      if (m->type() == ID_SolverMenu)
+         MemT_Solv_Eq_Fin = 1;
+      else if  (m->type() == ID_EquationsMenu)
+         MemT_Solv_Eq_Fin = 2;
+      else if  (m->type() == ID_FinanceSolverMenu)
+         MemT_Solv_Eq_Fin = 0;
+   }
+   if (MemT_Solv_Eq_Fin == 0)
+   {
+      MemT_Solv_Eq_Fin = 1;
+      return run<SolverMenu>();
+   }
+   if (MemT_Solv_Eq_Fin == 1)
+   {
+      MemT_Solv_Eq_Fin = 2;
+      return run<EquationsMenu>();
+   }
+   if (MemT_Solv_Eq_Fin == 2)
+   {
+      MemT_Solv_Eq_Fin = 0;
+      object_p cat = command::static_object(menu::ID_FinanceSolverMenu);
+      cat->evaluate();
+      return OK;
+   }
+   return OK;
+}
+
+// ToggleF1
+COMMAND_BODY(Unit_Cnv_Cte)
+{
+   if (menu_p m = ui.menu())
+   {
+      if (m->type() == ID_UnitsMenu)
+         MemT_Unit_Cnv_Cte = 1;
+      else if  (m->type() == ID_UnitsConversionsMenu)
+         MemT_Unit_Cnv_Cte = 2;
+      else if  (m->type() == ID_ConstantsMenu)
+         MemT_Unit_Cnv_Cte = 0;
+   }
+   if (MemT_Unit_Cnv_Cte == 0)
+   {
+      MemT_Unit_Cnv_Cte = 1;
+      return run<UnitsMenu>();
+   }
+   if (MemT_Unit_Cnv_Cte == 1)
+   {
+      MemT_Unit_Cnv_Cte = 2;
+      return run<UnitsConversionsMenu>();
+   }
+   if (MemT_Unit_Cnv_Cte == 2)
+   {
+      MemT_Unit_Cnv_Cte = 0;
+      return run<ConstantsMenu>();
+   }
+   return OK;
+}
+
+// ToggleD1
+COMMAND_BODY(Trig_Ang_Hypb)
+{
+   if (menu_p m = ui.menu())
+   {
+      if (m->type() == ID_CircularMenu)
+         MemT_Trig_Ang_Hypb = 1;
+      else if  (m->type() == ID_AnglesMenu)
+         MemT_Trig_Ang_Hypb = 2;
+      else if  (m->type() == ID_HyperbolicMenu)
+         MemT_Trig_Ang_Hypb = 0;
+   }
+   if (MemT_Trig_Ang_Hypb == 0)
+   {
+      MemT_Trig_Ang_Hypb = 1;
+      return run<CircularMenu>();
+   }
+   if (MemT_Trig_Ang_Hypb == 1)
+   {
+      MemT_Trig_Ang_Hypb = 2;
+      return run<AnglesMenu>();
+   }
+   if (MemT_Trig_Ang_Hypb == 2)
+   {
+      MemT_Trig_Ang_Hypb = 0;
+      return run<HyperbolicMenu>();
+   }
+   return OK;
+}
+
+// ToggleD3
+COMMAND_BODY(Pow_Real_Cplx)
+{
+   if (menu_p m = ui.menu())
+   {
+      if (m->type() == ID_PowersMenu)
+         MemT_Pow_Real_Cplx = 1;
+      else if  (m->type() == ID_ComplexMenu)
+         MemT_Pow_Real_Cplx = 0;
+      else if  (m->type() == ID_RealMenu)
+         MemT_Pow_Real_Cplx = 2;
+   }
+   if (MemT_Pow_Real_Cplx == 0)
+   {
+      MemT_Pow_Real_Cplx = 1;
+      return run<PowersMenu>();
+   }
+   if (MemT_Pow_Real_Cplx == 1)
+   {
+      MemT_Pow_Real_Cplx = 2;
+      return run<RealMenu>();
+   }
+   if (MemT_Pow_Real_Cplx == 2)
+   {
+      MemT_Pow_Real_Cplx = 0;
+      return run<ComplexMenu>();
+   }
+   return OK;
+}
+
+// ToggleD2
+COMMAND_BODY(Base_Numb_Frac)
+{   
+   if (menu_p m = ui.menu())
+   {
+      if (m->type() == ID_BasesMenu)
+         MemT_Base_Numb_Frac = 1;
+      else if  (m->type() == ID_FractionsMenu)
+         MemT_Base_Numb_Frac = 0;
+      else if  (m->type() == ID_NumbersMenu)
+         MemT_Base_Numb_Frac = 2;
+   }
+   if (MemT_Base_Numb_Frac == 0)
+   {
+      MemT_Base_Numb_Frac = 1;
+      return run<BasesMenu>();
+   }
+   if (MemT_Base_Numb_Frac == 1)
+   {
+      MemT_Base_Numb_Frac = 2;
+      return run<NumbersMenu>();
+   }
+   if (MemT_Base_Numb_Frac == 2)
+   {
+      MemT_Base_Numb_Frac = 0;
+      return run<FractionsMenu>();
+   }
+   return OK;
+}
+

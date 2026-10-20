@@ -1260,6 +1260,12 @@ SETTING(GraphRenderingSizeLimit,uint(32),   uint(0x10000), uint(256))
 SETTING(StatsPlotBins,          uint(2),    uint(LCD_W),   uint(25))
 SETTING(XYPlotBins,             uint(2),    uint(512),     uint(64))
 SETTING(PlotRefreshRate,        50U,        1000000U,      500U)
+SETTING(BLlevel,                uint(10),   uint(1000),    uint(250))
+SETTING(BLTime,                 uint(0),    uint(60),      uint(10))
+SETTING(TMzone,                 uint(0),    uint(29),      uint(5))
+SETTING(MySetting,              uint(0),    uint(32),      uint(13))
+SETTING(PoffTime,               uint(120),  uint(7200),    uint(600))
+SETTING(CpuFreq,                uint(60),   uint(240),     uint(160))
 
 SETTING_ENUM(DateSlash,         nullptr,        DateSeparatorCommand)
 SETTING_ENUM(DateDash,          nullptr,        DateSeparatorCommand)
@@ -1384,6 +1390,10 @@ MENU(UserInterfaceModesMenu)
 MENU(MathModesMenu)
 MENU(PrintingMenu)
 MENU(IOMenu)
+
+MENU(DBxxxxMenu)
+MENU(StatusBarMenu)
+
 MENU(FilesMenu)
 MENU(TimeMenu)
 MENU(DateMenu)
@@ -1399,6 +1409,18 @@ MENU(EditMenu)
 CMD(VariablesMenu)
 CMD(CustomMenu)                 ALIAS(CustomMenu, "Cst")
 CMD(ToggleCustomMenu)
+
+// added toggle keys
+CMD(Main_Math_Tool)                
+CMD(Cat_Mem_Lib)                 
+CMD(Prg_Dbg_Mem)                 // prg menu toggle
+CMD(Trig_Ang_Hypb)
+CMD(Base_Numb_Frac)
+CMD(Pow_Real_Cplx)
+CMD(Solv_Eq_Fin)
+CMD(STK_Cte_Parts)
+CMD(Unit_Cnv_Cte)
+
 CMD(SolvingMenu)
 CMD(FinanceSolverMenu)          ALIAS(FinanceSolverMenu, "TVM")
 CMD(ToolsMenu)
@@ -1409,6 +1431,7 @@ CMD(Undo)                       // Immediate: do not save stack before Undo
 NAMED(Off, "PowerOff")
 NAMED(OffWithImage, "PowerOffWithImage")
 CMD(SystemSetup)
+CMD(About_)
 
 
 // ============================================================================

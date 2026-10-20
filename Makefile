@@ -25,8 +25,9 @@
 ##    make debug          : Build for debugging
 ##
 ## Target prefix can be used to combine configurations:
-##    make color-dm32-sim : Build color simulator for dm32 (db50x)
-##    make sim-debug      : Build debug simulator
+##    make color-dm32-sim   : Build color simulator for dm32 (db50x)
+##    make color-dm32-sim50 : Build color simulator for dm32 with Casio Graph75 keyboard (db50c)
+##    make sim-debug        : Build debug simulator
 #
 #******************************************************************************
 #  (C) 2026 Christophe de Dinechin <christophe@dinechin.org>
@@ -48,9 +49,10 @@
 
 # all: dm32 dm42 dm42-sim color-dm32-sim dm42-android color-dm32-android
 all:		fw sims
-sims:		dm42-sim color-dm32-sim
+sims:		dm42-sim  color-dm32-sim color-dm32-sim50
 fw:		dm32 dm42
 androids:	android color-dm32-android
+
 
 # ------------------------------------------------------------------------------
 # Package
@@ -336,6 +338,7 @@ dm42:		dm42-fw-$(TARGET)
 dm32:		dm32-fw-$(TARGET)
 dm42n:		dm42n-fw-$(TARGET)
 sim:		sim-$(TARGET)
+sim50:		sim50-$(TARGET)
 android:	android-$(TARGET)
 wasm:		wasm-$(TARGET)
 
@@ -344,6 +347,14 @@ fw-%:
 ifeq ($(filter $(KIND),sim wasm),)
 sim-%:
 	$(PRINT_COMMAND) $(MAKE) qt-$* KIND=sim BUILDENV=auto RECURSE=.config
+sim50-%:
+	$(PRINT_COMMAND) $(MAKE) qt-$* \
+		KIND=sim \
+		BUILDENV=auto \
+		RECURSE=.config \
+		QT_DEFINES=KBD_CASIO_50=1 \
+		QT_TARGET=db50c \
+		VARIANT=$(COLOR:%=%-)$(MODEL)-sim50
 endif
 ifneq ($(KIND),android)
 android-%:
@@ -496,7 +507,7 @@ QMAKE ?= $(shell which qmake6 2>/dev/null || which qmake)
 QMAKE_opt = release
 QMAKE_release = release
 QMAKE_debug = debug
-QMAKEFILE=sim/$(NAME)-$(KIND)-$(TARGET).mak
+QMAKEFILE=sim/$(NAME)-$(VARIANT)-$(TARGET).mak
 
 # Qt resource files
 QRC_FILES=		sim/config.qrc		\
@@ -521,6 +532,8 @@ $(QMAKEFILE): sim/$(NAME).pro $(QRC_FILES) $(MIQ_MAKEDEPS) $(CHUCK_H) .config
 		$(if $V,,CONFIG+=silent) 			\
 		CONFIG+=$(QMAKE_$(TARGET)) 			\
 		DEFINES+="DB48X_VERSION=\'\\\"$(VERSION)\\\"\'"	\
+		$(QT_DEFINES:%=DEFINES+=%)			\
+		$(QT_TARGET:%=TARGET=%)				\
 		DESTDIR="$$DESTDIR"				\
 		OBJECTS_DIR=$(abspath $(MIQ_OBJDIR))		\
 		RCC_DIR=$(abspath $(MIQ_OBJDIR))		\

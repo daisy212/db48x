@@ -77,7 +77,11 @@ struct user_interface
     {
         HISTORY         = 8,    // Number of menus and commands kept in history
         NUM_PLANES      = 3,    // NONE, Shift and "extended" shift
+#if (KBD_CASIO_50 == 1)
+        NUM_KEYS        = 53,   // Including SCREENSHOT, SH_UP and SH_DN
+#else
         NUM_KEYS        = 46,   // Including SCREENSHOT, SH_UP and SH_DN
+#endif
         NUM_SOFTKEYS    = 6,    // Number of softkeys
         NUM_MENUS = NUM_PLANES * NUM_SOFTKEYS,
     };
@@ -365,6 +369,18 @@ inline int user_interface::evaluating_function_key() const
 
 
 enum { TIMER0, TIMER1, TIMER2, TIMER3 };
+
+COMMAND_DECLARE(Main_Math_Tool, 0);
+COMMAND_DECLARE(Cat_Mem_Lib, 0);
+COMMAND_DECLARE(Prg_Dbg_Mem, 0);
+COMMAND_DECLARE(Trig_Ang_Hypb, 0);
+COMMAND_DECLARE(Base_Numb_Frac, 0);
+COMMAND_DECLARE(Pow_Real_Cplx, 0);
+COMMAND_DECLARE(STK_Cte_Parts, 0);
+COMMAND_DECLARE(Unit_Cnv_Cte, 0);
+COMMAND_DECLARE(Solv_Eq_Fin, 0);
+
+
 
 extern user_interface ui;
 

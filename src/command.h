@@ -223,6 +223,10 @@ COMMAND_DECLARE(UIDown,-1);             // Actions related to down key
 COMMAND_DECLARE(UIBackspace,-1);        // Actions related to backspace
 COMMAND_DECLARE(UIDelete,-1);           // Action related to delete
 
+
+COMMAND_DECLARE(About_, 0);				// Return version informations
+
+
 #ifdef HAS_CHUCK
 COMMAND_DECLARE(ChuckNorris,0);         // Return a Chuck Norris quote
 #endif // HAS_CHUCK

@@ -21310,6 +21310,7 @@ Buttons are shown as they appear on the calculator screen:
 - [ComplexMenu](#complexmenu)
 - [ConstantsMenu](#constantsmenu-reference)
 - [DateMenu](#datemenu-reference)
+- [DBxxxxMenu](#dbxxxxmenu)
 - [DebugMenu](#debugmenu-reference)
 - [DifferentialSolverMenu](#differentialsolvermenu)
 - [DisplayModesMenu](#displaymodesmenu-reference)
@@ -21352,6 +21353,7 @@ Buttons are shown as they appear on the calculator screen:
 - [SolverMenu](#solvermenu)
 - [StackMenu](#stackmenu)
 - [StatisticsMenu](#statisticsmenu)
+- [StatusBarMenu](#statusbarmenu)
 - [SymbolicMenu](#symbolicmenu)
 - [SymbolicSolverMenu](#symbolicsolvermenu)
 - [TestsMenu](#testsmenu)
@@ -21388,7 +21390,7 @@ Access: 🟦 D (yˣ); [SymbolicMenu](#symbolicmenu) F6
 
 ### AnglesMenu
 
-Access: 🟦 L (TAN); [ComplexMenu](#complexmenu) 🟦 F5; [MathMenu](#mathmenu-reference) 🟦 F3; [ModesMenu](#modesmenu-reference) 🟨 F2; [RealMenu](#realmenu) 🟦 F5
+Access: 🟦 L (TAN); [ComplexMenu](#complexmenu) 🟦 F5; [MathMenu](#mathmenu-reference) 🟦 F3; [RealMenu](#realmenu) 🟦 F5
 
 | F1 | F2 | F3 | F4 | F5 | F6 |
 |:--:|:--:|:--:|:--:|:--:|:--:|
@@ -21410,15 +21412,15 @@ Access: [SymbolicMenu](#symbolicmenu) 🟨 F1
 
 Access: 🟨 T (4); [MathMenu](#mathmenu-reference) 🟦 F2; [ProgramMenu](#programmenu) 🟨 F5
 
-*3 pages · 45 items total*
+*3 pages · 44 items total*
 
 **Page 1**
 
 | F1 | F2 | F3 | F4 | F5 | F6 |
 |:--:|:--:|:--:|:--:|:--:|:--:|
-| [WordSize](#wordsize) | [NAnd](#nand) | [NOr](#nor) | [Implies](#implies) | [Excludes](#excludes) |   |
-| [Base](#base) | Bin | Oct | Dec | Hex | ◀ |
-| `#` | [And](#and) | [Or](#or) | [Xor](#xor) | [Not](#not) | ▶ |
+| SetBit | [NAnd](#nand) | [NOr](#nor) | [Implies](#implies) | [Excludes](#excludes) |   |
+| CntBits | [And](#and) | [Or](#or) | [Xor](#xor) | [Not](#not) | ◀ |
+| `#` | R→B | B→R | [Base](#base) | [WordSize](#wordsize) | ▶ |
 
 **Page 2**
 
@@ -21432,9 +21434,9 @@ Access: 🟨 T (4); [MathMenu](#mathmenu-reference) 🟦 F2; [ProgramMenu](#prog
 
 | F1 | F2 | F3 | F4 | F5 | F6 |
 |:--:|:--:|:--:|:--:|:--:|:--:|
-| CntBits | 1-comp | 2-comp | [Modern](#modernbasednumbers) | [TruthLogicForIntegers](#truthlogicforintegers) |   |
-| SetBit | ClrBit | FlipBit | FstSet | LstSet | ◀ |
-| `#` | R→B | B→R | [Base](#base) | [WordSize](#wordsize) | ▶ |
+| 1-comp | 2-comp | [Modern](#modernbasednumbers) | [TruthLogicForIntegers](#truthlogicforintegers) |   |   |
+| [Base](#base) | Bin | Oct | Dec | Hex | ◀ |
+| SetBit | ClrBit | FlipBit | FstSet | LstSet | ▶ |
 
 ### CalculationMenu
 
@@ -21498,6 +21500,16 @@ Access: [AlarmMenu](#alarmmenu) 🟨 F3; [TimeMenu](#timemenu-reference) 🟦 F4
 | [→Time](#settime) | [→Date](#setdate) | [JDN](#juliandaynumber) | [JDN→](#datefromjuliandaynumber) | \[[Time](#timemenu-reference)\] | \[[Alarms](#alarmmenu)\] |
 | `_date` | `_d` | [Date](#date-1) | [Dt+Tm](#datetime) | ∆Date | [Date+](#date) |
 
+### DBxxxxMenu
+
+Access: [ModesMenu](#modesmenu-reference) 🟨 F6
+
+| F1 | F2 | F3 | F4 | F5 | F6 |
+|:--:|:--:|:--:|:--:|:--:|:--:|
+| [Voltage](#batteryvoltage) | _Temp_ |   |   |   |   |
+| [→Time](#settime) | [→Date](#setdate) | _SetStateName_ | [Save](#savestate) | _Merge_ | _Load_ |
+| PoffTime | BLlevel | BLTime | TMzone | CpuFreq | _HardReset_ |
+
 ### DebugMenu Reference
 
 See also: [DebugMenu](#debugmenu) user documentation
@@ -21524,7 +21536,7 @@ Access: [SolverMenu](#solvermenu) 🟨 F4; [SymbolicMenu](#symbolicmenu) 🟦 F2
 
 See also: [DisplayModesMenu](#displaymodesmenu) user documentation
 
-Access: 🟨 O (EEX); [MathModesMenu](#mathmodesmenu-reference) 🟦 F6; [ModesMenu](#modesmenu-reference) 🟨 F5; [SeparatorModesMenu](#separatormodesmenu-reference) 🟨 F5
+Access: 🟨 O (EEX); [MathModesMenu](#mathmodesmenu-reference) 🟦 F6; [ModesMenu](#modesmenu-reference) F1; [SeparatorModesMenu](#separatormodesmenu-reference) 🟨 F5
 
 | F1 | F2 | F3 | F4 | F5 | F6 |
 |:--:|:--:|:--:|:--:|:--:|:--:|
@@ -21720,7 +21732,7 @@ Access: E (1/x); [MainMenu](#mainmenu-reference) F2
 
 See also: [MathModesMenu](#mathmodesmenu) user documentation
 
-Access: [DisplayModesMenu](#displaymodesmenu-reference) 🟦 F6; [ModesMenu](#modesmenu-reference) F4
+Access: [DisplayModesMenu](#displaymodesmenu-reference) 🟦 F6; [ModesMenu](#modesmenu-reference) F3
 
 | F1 | F2 | F3 | F4 | F5 | F6 |
 |:--:|:--:|:--:|:--:|:--:|:--:|
@@ -21796,9 +21808,9 @@ Access: 🟨 N (+/-); [FlagsMenu](#flagsmenu) 🟦 F3; [MainMenu](#mainmenu-refe
 
 | F1 | F2 | F3 | F4 | F5 | F6 |
 |:--:|:--:|:--:|:--:|:--:|:--:|
-| [Modes](#modes) | [Reset](#resetmodes) | [System](#systemsetup) |   |   |   |
-| Grad | \[[Angles](#anglesmenu)\] | Beep | Flash | \[[Display](#displaymodesmenu-reference)\] | \[[Seps](#separatormodesmenu-reference)\] |
-| Deg | Rad | [n×π](#piradians) | \[[Math](#mathmodesmenu-reference)\] | \[[User](#usermodemenu-reference)\] | \[[UI](#userinterfacemodesmenu)\] |
+| [System](#systemsetup) |   |   |   |   |   |
+| About | Beep | Flash | [Modes](#modes) | [Reset](#resetmodes) | \[[DBxxxx](#dbxxxxmenu)\] |
+| \[[Display](#displaymodesmenu-reference)\] | \[[Seps](#separatormodesmenu-reference)\] | \[[Math](#mathmodesmenu-reference)\] | \[[User](#usermodemenu-reference)\] | \[[UI](#userinterfacemodesmenu)\] | \[[StatusBar](#statusbarmenu)\] |
 
 ### MultiSolverMenu
 
@@ -21984,7 +21996,7 @@ Access: 🟦 G (STO); [MainMenu](#mainmenu-reference) 🟨 F2; [MathMenu](#mathm
 
 See also: [SeparatorModesMenu](#separatormodesmenu) user documentation
 
-Access: [DisplayModesMenu](#displaymodesmenu-reference) 🟨 F6; [ModesMenu](#modesmenu-reference) 🟨 F6
+Access: [DisplayModesMenu](#displaymodesmenu-reference) 🟨 F6; [ModesMenu](#modesmenu-reference) F2
 
 | F1 | F2 | F3 | F4 | F5 | F6 |
 |:--:|:--:|:--:|:--:|:--:|:--:|
@@ -22063,6 +22075,16 @@ Access: 🟨 S (÷); [MathMenu](#mathmenu-reference) 🟨 F3
 |   |   |   |   |   |   |
 |   |   |   |   |   | ◀ |
 | [Median](#median) | [Bins](#frequencybins) | [PopVar](#populationvariance) | [PopSDev](#populationstandarddeviation) | [PCovar](#populationcovariance) | ▶ |
+
+### StatusBarMenu
+
+Access: [ModesMenu](#modesmenu-reference) F6
+
+| F1 | F2 | F3 | F4 | F5 | F6 |
+|:--:|:--:|:--:|:--:|:--:|:--:|
+| Volt |   |   |   |   |   |
+| Date Sep _ | Date Sep - | Date Sep . | Date Sep / | FirstYear | FirstMonth |
+| ShowDate | DayWeek | MonthName | ShowTime | Seconds | 24h |
 
 ### SymbolicMenu
 
@@ -22158,7 +22180,7 @@ Access: 🟦 U (5)
 
 ### UserInterfaceModesMenu
 
-Access: 🟦 N (+/-); [DisplayModesMenu](#displaymodesmenu-reference) 🟦 F5; [MainMenu](#mainmenu-reference) 🟨 F6; [ModesMenu](#modesmenu-reference) F6
+Access: 🟦 N (+/-); [DisplayModesMenu](#displaymodesmenu-reference) 🟦 F5; [MainMenu](#mainmenu-reference) 🟨 F6; [ModesMenu](#modesmenu-reference) F5
 
 *4 pages · 47 items total*
 
@@ -22198,7 +22220,7 @@ Access: 🟦 N (+/-); [DisplayModesMenu](#displaymodesmenu-reference) 🟦 F5; [
 
 See also: [UserModeMenu](#usermodemenu) user documentation
 
-Access: [ModesMenu](#modesmenu-reference) F5; [UserInterfaceModesMenu](#userinterfacemodesmenu) F5
+Access: [ModesMenu](#modesmenu-reference) F4; [UserInterfaceModesMenu](#userinterfacemodesmenu) F5
 
 | F1 | F2 | F3 | F4 | F5 | F6 |
 |:--:|:--:|:--:|:--:|:--:|:--:|

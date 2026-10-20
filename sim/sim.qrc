@@ -1,5 +1,6 @@
 <RCC>
     <qresource prefix="/bitmap">
+		<file alias="graph75.png">graph_75.png</file>
         <file alias="keymap.png">keyboard-db48x.png</file>
         <file alias="42style.png">keyboard-db48x-42like.png</file>
         <file alias="legacy.png">keyboard-db48x-old.png</file>

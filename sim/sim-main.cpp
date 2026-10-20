@@ -28,6 +28,7 @@
 // ****************************************************************************
 
 #include "main.h"
+
 #include "object.h"
 #include "recorder.h"
 #include "settings.h"
@@ -35,6 +36,7 @@
 #include "sim-rpl.h"
 #include "sim-window.h"
 #include "sysmenu.h"
+
 
 #include <cstdio>
 #include <cstdlib>

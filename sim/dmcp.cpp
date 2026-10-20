@@ -75,7 +75,6 @@ pixword              lcd_buffer[LCD_SCANLINE * LCD_H * color::BPP / 32];
 bool                 shift_held = false;
 bool                 alt_held   = false;
 
-
 // Eliminate a really cumbersome warning
 #define DS_INIT                                 \
     .x          = 0,                            \
@@ -540,8 +539,12 @@ int lcd_for_calc(int what)
     Screen.text(x, y, utf8("About"), font);
     Screen.invert(x, y, LCD_W, h);
     y += 3*h/2;
+#if (KBD_CASIO_50 == 1)
+    Screen.text(x, y, utf8("DMCP Simulator "), font);
+    Screen.text(x, y+h+2, utf8("Casio fx-9860GII/Graph75 50 keys keyboard "), font);
+#else
     Screen.text(x, y, utf8("DMCP Simulator"), font);
-
+#endif
     return 0;
 }
 int lcd_get_buf_cleared()

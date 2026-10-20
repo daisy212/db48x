@@ -44,16 +44,29 @@ enum simulated_target
 //   Constants for a given target
 // ----------------------------------------------------------------------------
 {
-#ifndef CONFIG_COLOR
-    SIM_BITS_PER_PIXEL = 1,
-    SIM_LCD_SCANLINE   = 416,
-#else
-    SIM_BITS_PER_PIXEL = 16,
-    SIM_LCD_SCANLINE   = 400,
-#endif // CONFIG_COLOR
-    SIM_LCD_W          = 400,
-    SIM_LCD_H          = 240,
 
+#if (KBD_CASIO_50 == 1)
+    SIM_LCD_W          = 536,
+    SIM_LCD_H          = 336,
+    SIM_LCD_SCANLINE   = 536,
+    #ifndef CONFIG_COLOR
+        SIM_BITS_PER_PIXEL = 1,
+    #else
+        SIM_BITS_PER_PIXEL = 16,
+    #endif
+#else
+    #ifndef CONFIG_COLOR
+        SIM_BITS_PER_PIXEL = 1,
+        SIM_LCD_SCANLINE   = 416,
+        SIM_LCD_W          = 400,
+        SIM_LCD_H          = 240,
+    #else
+        SIM_BITS_PER_PIXEL = 16,
+        SIM_LCD_W          = 400,
+        SIM_LCD_H          = 240,
+        SIM_LCD_SCANLINE   = 400,
+    #endif // CONFIG_COLOR
+#endif
     SIM_LCD_BUFSIZE    = SIM_LCD_SCANLINE * SIM_LCD_H * SIM_BITS_PER_PIXEL / 32,
 };
 

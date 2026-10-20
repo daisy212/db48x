@@ -12,7 +12,6 @@
 //
 //
 //
-//
 // ****************************************************************************
 //   (C) 2022 Christophe de Dinechin <christophe@dinechin.org>
 //   This software is licensed under the terms outlined in LICENSE.txt
@@ -90,6 +89,7 @@ extern bool alt_held;
 MainWindow *MainWindow::mainWindow = nullptr;
 qreal MainWindow::userScaling = 1.0;
 
+
 MainWindow::MainWindow(QWidget *parent, bool console)
 // ----------------------------------------------------------------------------
 //    The main window of the simulator
@@ -134,10 +134,15 @@ MainWindow::MainWindow(QWidget *parent, bool console)
     ui.keyboard->installEventFilter(this);
     ui.screen->setAttribute(Qt::WA_AcceptTouchEvents);
     ui.screen->installEventFilter(this);
-    ui.keyboard->setStyleSheet("border-image: "
-                               "url(:/bitmap/keymap.png) "
-                               "0 0 0 0 stretch stretch;");
-
+#if KBD_CASIO_50 == 1
+    ui.keyboard->setStyleSheet(
+        "border-image: url(:/bitmap/graph75.png) "
+        "0 0 0 0 stretch stretch;");
+#else
+    ui.keyboard->setStyleSheet(
+        "border-image: url(:/bitmap/keymap.png) "
+        "0 0 0 0 stretch stretch;");
+#endif
     highlight = new Highlight(ui.keyboard);
     highlight->setGeometry(0,0,0,0);
     highlight->show();
@@ -487,151 +492,389 @@ void MainWindow::handleAppStateChange(Qt::ApplicationState state)
 }
 #endif
 
+#if (KBD_CASIO_50 == 0)
+    const int keyMap[] =
+    // ----------------------------------------------------------------------------
+    //   Key map for the DM42
+    // ----------------------------------------------------------------------------
+    {
+        // Actual key mappings are in the relevant platform's target.h
+        Qt::Key_Tab,        KB_ALPHA,
+        Qt::Key_SysReq,     KB_ON,
+        Qt::Key_Escape,     KB_ON,
+        Qt::Key_Period,     KB_DOT,
+        Qt::Key_Space,      KB_SPC,
+        Qt::Key_Question,   KB_QUESTION,
+        Qt::Key_Meta,       KB_SHIFT,
 
-const int keyMap[] =
-// ----------------------------------------------------------------------------
-//   Key map for the DM42
-// ----------------------------------------------------------------------------
-{
-    // Actual key mappings are in the relevant platform's target.h
-    Qt::Key_Tab,        KB_ALPHA,
-    Qt::Key_SysReq,     KB_ON,
-    Qt::Key_Escape,     KB_ESC,
-    Qt::Key_Period,     KB_DOT,
-    Qt::Key_Space,      KB_SPC,
-    Qt::Key_Question,   KB_QUESTION,
-    Qt::Key_Meta,       KB_SHIFT,
+        Qt::Key_Plus,       KB_ADD,
+        Qt::Key_Minus,      KB_SUB,
+        Qt::Key_Asterisk,   KB_MUL,
+        Qt::Key_Slash,      KB_DIV,
 
-    Qt::Key_Plus,       KB_ADD,
-    Qt::Key_Minus,      KB_SUB,
-    Qt::Key_Asterisk,   KB_MUL,
-    Qt::Key_Slash,      KB_DIV,
+        Qt::Key_Enter,      KB_ENT,
+        Qt::Key_Return,     KB_ENT,
+        Qt::Key_Backspace,  KB_BKS,
+        Qt::Key_Up,         KB_UP,
+        Qt::Key_Down,       KB_DN,
+        Qt::Key_Left,       KB_LF,
+        Qt::Key_Right,      KB_RT,
 
-    Qt::Key_Enter,      KB_ENT,
-    Qt::Key_Return,     KB_ENT,
-    Qt::Key_Backspace,  KB_BKS,
-    Qt::Key_Up,         KB_UP,
-    Qt::Key_Down,       KB_DN,
-    Qt::Key_Left,       KB_LF,
-    Qt::Key_Right,      KB_RT,
+        Qt::Key_F1,         KB_F1,
+        Qt::Key_F2,         KB_F2,
+        Qt::Key_F3,         KB_F3,
+        Qt::Key_F4,         KB_F4,
+        Qt::Key_F5,         KB_F5,
+        Qt::Key_F6,         KB_F6,
 
-    Qt::Key_F1,         KB_F1,
-    Qt::Key_F2,         KB_F2,
-    Qt::Key_F3,         KB_F3,
-    Qt::Key_F4,         KB_F4,
-    Qt::Key_F5,         KB_F5,
-    Qt::Key_F6,         KB_F6,
+        Qt::Key_F7,         KB_F1,
+        Qt::Key_F8,         KB_F2,
+        Qt::Key_F9,         KB_F3,
+        Qt::Key_F10,         KB_F4,
+        Qt::Key_F11,         KB_F5,
+        Qt::Key_F12,         KB_F6,
 
-    Qt::Key_F8,         KEY_SCREENSHOT,
+        Qt::Key_F8,         KEY_SCREENSHOT,
 
-    Qt::Key_0,          KB_0,
-    Qt::Key_1,          KB_1,
-    Qt::Key_2,          KB_2,
-    Qt::Key_3,          KB_3,
-    Qt::Key_4,          KB_4,
-    Qt::Key_5,          KB_5,
-    Qt::Key_6,          KB_6,
-    Qt::Key_7,          KB_7,
-    Qt::Key_8,          KB_8,
-    Qt::Key_9,          KB_9,
-    Qt::Key_A,          KB_A,
-    Qt::Key_B,          KB_B,
-    Qt::Key_C,          KB_C,
-    Qt::Key_D,          KB_D,
-    Qt::Key_E,          KB_E,
-    Qt::Key_F,          KB_F,
-    Qt::Key_G,          KB_G,
-    Qt::Key_H,          KB_H,
-    Qt::Key_I,          KB_I,
-    Qt::Key_J,          KB_J,
-    Qt::Key_K,          KB_K,
-    Qt::Key_L,          KB_L,
-    Qt::Key_M,          KB_M,
-    Qt::Key_N,          KB_N,
-    Qt::Key_O,          KB_O,
-    Qt::Key_P,          KB_P,
-    Qt::Key_Q,          KB_Q,
-    Qt::Key_R,          KB_R,
-    Qt::Key_S,          KB_S,
-    Qt::Key_T,          KB_T,
-    Qt::Key_U,          KB_U,
-    Qt::Key_V,          KB_V,
-    Qt::Key_W,          KB_W,
-    Qt::Key_X,          KB_X,
-    Qt::Key_Y,          KB_Y,
-    Qt::Key_Z,          KB_Z,
+        Qt::Key_0,          KB_0,
+        Qt::Key_1,          KB_1,
+        Qt::Key_2,          KB_2,
+        Qt::Key_3,          KB_3,
+        Qt::Key_4,          KB_4,
+        Qt::Key_5,          KB_5,
+        Qt::Key_6,          KB_6,
+        Qt::Key_7,          KB_7,
+        Qt::Key_8,          KB_8,
+        Qt::Key_9,          KB_9,
+        Qt::Key_A,          KB_A,
+        Qt::Key_B,          KB_B,
+        Qt::Key_C,          KB_C,
+        Qt::Key_D,          KB_D,
+        Qt::Key_E,          KB_E,
+        Qt::Key_F,          KB_F,
+        Qt::Key_G,          KB_G,
+        Qt::Key_H,          KB_H,
+        Qt::Key_I,          KB_I,
+        Qt::Key_J,          KB_J,
+        Qt::Key_K,          KB_K,
+        Qt::Key_L,          KB_L,
+        Qt::Key_M,          KB_M,
+        Qt::Key_N,          KB_N,
+        Qt::Key_O,          KB_O,
+        Qt::Key_P,          KB_P,
+        Qt::Key_Q,          KB_Q,
+        Qt::Key_R,          KB_R,
+        Qt::Key_S,          KB_S,
+        Qt::Key_T,          KB_T,
+        Qt::Key_U,          KB_U,
+        Qt::Key_V,          KB_V,
+        Qt::Key_W,          KB_W,
+        Qt::Key_X,          KB_X,
+        Qt::Key_Y,          KB_Y,
+        Qt::Key_Z,          KB_Z,
 
-#ifdef KB_HOME
-    Qt::Key_Home,       KB_HOME,
-#endif // KB_HOME
+    #ifdef KB_HOME
+        Qt::Key_Home,       KB_HOME,
+    #endif // KB_HOME
 
-#ifdef KB_HELP
-    Qt::Key_F11,        KB_HELP,
-#endif // KB_HELP
+    #ifdef KB_HELP
+        Qt::Key_F11,        KB_HELP,
+    #endif // KB_HELP
 
-    0,0
+        0,0
+    };
+
+    struct mousemap
+    {
+        int key, keynum;
+        qreal left, right, top, bot;
+    } mouseMap[] = {
+
+        { Qt::Key_F1,        38, 0.01, 0.15, 0.03, 0.10 },
+        { Qt::Key_F2,        39, 0.20, 0.32, 0.03, 0.10 },
+        { Qt::Key_F3,        40, 0.345, 0.47, 0.03, 0.10 },
+        { Qt::Key_F4,        41, 0.52, 0.63, 0.03, 0.10 },
+        { Qt::Key_F5,        42, 0.68, 0.80, 0.03, 0.10 },
+        { Qt::Key_F6,        43, 0.83, 0.95, 0.03, 0.10 },
+
+        { Qt::Key_A,          1, 0.03, 0.15, 0.15, 0.22 },
+        { Qt::Key_B,          2, 0.20, 0.32, 0.15, 0.22 },
+        { Qt::Key_C,          3, 0.345, 0.47, 0.15, 0.22 },
+        { Qt::Key_D,          4, 0.52, 0.63, 0.15, 0.22 },
+        { Qt::Key_E,          5, 0.68, 0.80, 0.15, 0.22 },
+        { Qt::Key_F,          6, 0.83, 0.95, 0.15, 0.22 },
+
+        { Qt::Key_G,          7, 0.03, 0.15, 0.275, 0.345 },
+        { Qt::Key_H,          8, 0.20, 0.32, 0.275, 0.345 },
+        { Qt::Key_I,          9, 0.345, 0.47, 0.275, 0.345 },
+        { Qt::Key_J,         10, 0.52, 0.63, 0.275, 0.345 },
+        { Qt::Key_K,         11, 0.68, 0.80, 0.275, 0.345 },
+        { Qt::Key_L,         12, 0.83, 0.95, 0.275, 0.345 },
+
+        { Qt::Key_Return,    13, 0.03, 0.32, 0.40, 0.47 },
+        { Qt::Key_M,         14, 0.345, 0.47, 0.40, 0.47 },
+        { Qt::Key_N,         15, 0.51, 0.64, 0.40, 0.47 },
+        { Qt::Key_O,         16, 0.68, 0.80, 0.40, 0.47 },
+        { Qt::Key_Backspace, 17, 0.83, 0.95, 0.40, 0.47 },
+
+        { Qt::Key_Up,        18, 0.03, 0.15, 0.52, 0.59 },
+        { Qt::Key_7,         19, 0.23, 0.36, 0.52, 0.59 },
+        { Qt::Key_8,         20, 0.42, 0.56, 0.52, 0.59 },
+        { Qt::Key_9,         21, 0.62, 0.75, 0.52, 0.59 },
+        { Qt::Key_Slash,     22, 0.81, 0.95, 0.52, 0.59 },
+
+        { Qt::Key_Down,      23, 0.03, 0.15, 0.645, 0.715 },
+        { Qt::Key_4,         24, 0.23, 0.36, 0.645, 0.715 },
+        { Qt::Key_5,         25, 0.42, 0.56, 0.645, 0.715 },
+        { Qt::Key_6,         26, 0.62, 0.75, 0.645, 0.715 },
+        { Qt::Key_Asterisk,  27, 0.81, 0.95, 0.645, 0.715 },
+
+        { Qt::Key_Alt,       28, 0.028, 0.145, 0.77, 0.84 },
+        { Qt::Key_1,         29, 0.23, 0.36, 0.77, 0.84 },
+        { Qt::Key_2,         30, 0.42, 0.56, 0.77, 0.84 },
+        { Qt::Key_3,         31, 0.62, 0.75, 0.77, 0.84 },
+        { Qt::Key_Minus,     32, 0.81, 0.95, 0.77, 0.84 },
+
+        { Qt::Key_Escape,    33, 0.03, 0.15, 0.89, 0.97 },
+        { Qt::Key_0,         34, 0.23, 0.36, 0.89, 0.97 },
+        { Qt::Key_Period,    35, 0.42, 0.55, 0.89, 0.97 },
+        { Qt::Key_Question,  36, 0.62, 0.74, 0.89, 0.97 },
+        { Qt::Key_Plus,      37, 0.81, 0.95, 0.89, 0.97 },
+
+        {                0,  0,      0.0,      0.0,      0.0,      0.0}
+    };
+
+#endif
+
+
+#if (KBD_CASIO_50 == 1)
+    const int keyMap[] =
+    // ----------------------------------------------------------------------------
+    //   Key map for the Graph 75, using US international keyboard
+    // ----------------------------------------------------------------------------
+    {
+        // Actual key mappings are in the relevant platform's target.h
+        Qt::Key_F1,             KEY_F1,
+        Qt::Key_F2,             KEY_F2,
+        Qt::Key_F3,             KEY_F3,
+        Qt::Key_F4,             KEY_F4,
+        Qt::Key_F5,             KEY_F5,
+        Qt::Key_F6,             KEY_F6,
+        Qt::Key_F8,             KEY_SCREENSHOT,
+
+        Qt::Key_Dead_Grave,     KEY_SHIFT,
+        Qt::Key_BracketLeft,    KEY_STO,
+        Qt::Key_BracketRight,   KEY_RCL,
+        Qt::Key_Dead_Acute,     KEY_SHIFT2,
+        Qt::Key_Left,           KEY_LEFT,
+        Qt::Key_Up,             KEY_UP,
+
+        Qt::Key_Tab,            KEY_ALPHA,
+        Qt::Key_Equal,          KEY_SIGMA,
+        Qt::Key_Backslash,      KEY_CAT,
+        Qt::Key_Escape,         KEY_EXIT,
+        Qt::Key_Down,           KEY_DOWN,
+        Qt::Key_Right,          KEY_RIGHT,
+
+        Qt::Key_A,          KB_A,
+        Qt::Key_B,          KB_B,
+        Qt::Key_C,          KB_C,
+        Qt::Key_D,          KB_D,
+        Qt::Key_E,          KB_E,
+        Qt::Key_F,          KB_F,
+        Qt::Key_G,          KB_G,
+        Qt::Key_H,          KB_H,
+        Qt::Key_I,          KB_I,
+        Qt::Key_J,          KB_J,
+        Qt::Key_K,          KB_K,
+        Qt::Key_L,          KB_L,
+
+        Qt::Key_M,          KB_M,
+        Qt::Key_N,          KB_N,
+        Qt::Key_O,          KB_O,
+        Qt::Key_Backspace,  KEY_BSP,
+        Qt::Key_Enter,      KEY_ENTER,
+        Qt::Key_Return,     KEY_ENTER,
+
+        Qt::Key_P,          KB_P,
+        Qt::Key_Q,          KB_Q,
+        Qt::Key_R,          KB_R,
+        Qt::Key_S,          KB_S,
+        Qt::Key_T,          KB_T,
+
+        Qt::Key_U,          KB_U,
+        Qt::Key_V,          KB_V,
+        Qt::Key_W,          KB_W,
+        Qt::Key_X,          KB_X,
+
+        Qt::Key_Y,          KB_Y,
+        Qt::Key_Z,          KB_Z,
+
+        Qt::Key_7,          KB_7,
+        Qt::Key_8,          KB_8,
+        Qt::Key_9,          KB_9,
+
+        Qt::Key_4,          KB_4,
+        Qt::Key_5,          KB_5,
+        Qt::Key_6,          KB_6,
+        Qt::Key_Asterisk,   KEY_MUL,
+        Qt::Key_Slash,      KEY_DIV,
+ 
+        Qt::Key_1,          KB_1,
+        Qt::Key_2,          KB_2,
+        Qt::Key_3,          KB_3,
+        Qt::Key_Plus,       KEY_ADD,
+        Qt::Key_Minus,      KEY_SUB,
+ 
+        Qt::Key_0,          KB_0,
+        Qt::Key_Period,     KEY_DOT,
+        Qt::Key_Comma,      KEY_E,
+        Qt::Key_Semicolon,     KEY_CHS,
+        Qt::Key_Space,      KEY_RUN,
+        Qt::Key_Question,   KEY_RUN,
+
+
+
+
+
+    #ifdef KB_HOME
+        Qt::Key_Home,       KB_HOME,
+    #endif // KB_HOME
+
+    #ifdef KB_HELP
+        Qt::Key_F11,        KB_HELP,
+    #endif // KB_HELP
+
+        0,0
+    };
+
+    struct mousemap
+    {
+        int key, keynum;
+        qreal left, right, top, bot;
+    } ;
+
+struct mousemap mouseMap[]{
+    // Mouse map for the Graph 75
+    // Reference image: 1042 x 1509 pixels
+    // Coordinates normalized between 0.0 and 1.0
+    // Format:
+    // { Qt::Key, CalculatorKey, x_min, x_max, y_min, y_max }
+
+    // =========================================================
+    // ROW A - FUNCTION KEYS
+    // =========================================================
+
+    { Qt::Key_F1,        K_A1, 0.051, 0.182, 0.011, 0.100 },
+    { Qt::Key_F2,        K_A2, 0.207, 0.339, 0.011, 0.100 },
+    { Qt::Key_F3,        K_A3, 0.361, 0.492, 0.011, 0.100 },
+    { Qt::Key_F4,        K_A4, 0.513, 0.644, 0.011, 0.100 },
+    { Qt::Key_F5,        K_A5, 0.667, 0.798, 0.011, 0.100 },
+    { Qt::Key_F6,        K_A6, 0.820, 0.951, 0.011, 0.100 },
+
+
+    // =========================================================
+    // ROW B
+    // =========================================================
+
+    { Qt::Key_Alt,       K_B1, 0.041, 0.184, 0.146, 0.210 },
+    { Qt::Key_G,         K_B2, 0.201, 0.340, 0.148, 0.210 },
+    { Qt::Key_H,         K_B3, 0.355, 0.498, 0.148, 0.210 },
+    { Qt::Key_F12,       K_B4, 0.513, 0.654, 0.146, 0.211 },
+
+    // REPLAY - LEFT / UP
+
+    { Qt::Key_Left,      K_B5, 0.676, 0.758, 0.183, 0.250 },
+    { Qt::Key_Up,        K_B6, 0.758, 0.861, 0.126, 0.184 },
+
+
+    // =========================================================
+    // ROW C
+    // =========================================================
+
+    { Qt::Key_F15,       K_C1, 0.041, 0.185, 0.250, 0.315 },
+    { Qt::Key_A,         K_C2, 0.201, 0.340, 0.252, 0.314 },
+    { Qt::Key_F13,       K_C3, 0.355, 0.498, 0.252, 0.314 },
+    { Qt::Key_Escape,    K_C4, 0.513, 0.654, 0.251, 0.314 },
+
+    // REPLAY - DOWN / RIGHT
+
+    { Qt::Key_Down,      K_C5, 0.758, 0.861, 0.249, 0.307 },
+    { Qt::Key_Right,     K_C6, 0.860, 0.943, 0.183, 0.250 },
+
+
+    // =========================================================
+    // ROW D
+    // =========================================================
+
+    { Qt::Key_J,         K_D1, 0.028, 0.179, 0.373, 0.436 },
+    { Qt::Key_K,         K_D2, 0.192, 0.341, 0.374, 0.435 },
+    { Qt::Key_L,         K_D3, 0.353, 0.498, 0.374, 0.436 },
+    { Qt::Key_C,         K_D4, 0.511, 0.658, 0.374, 0.436 },
+    { Qt::Key_D,         K_D5, 0.671, 0.820, 0.374, 0.436 },
+    { Qt::Key_B,         K_D6, 0.831, 0.972, 0.374, 0.435 },
+
+
+    // =========================================================
+    // ROW E
+    // =========================================================
+
+    { Qt::Key_F7,        K_E1, 0.029, 0.179, 0.469, 0.530 },
+    { Qt::Key_F8,        K_E2, 0.191, 0.341, 0.469, 0.530 },
+    { Qt::Key_F9,        K_E3, 0.353, 0.497, 0.469, 0.531 },
+    { Qt::Key_I,         K_E4, 0.510, 0.658, 0.469, 0.531 },
+    { Qt::Key_M,         K_E5, 0.669, 0.820, 0.469, 0.531 },
+    { Qt::Key_F,         K_E6, 0.831, 0.972, 0.469, 0.529 },
+
+
+    // =========================================================
+    // ROW F
+    // =========================================================
+
+    { Qt::Key_7,         K_F1, 0.027, 0.210, 0.565, 0.641 },
+    { Qt::Key_8,         K_F2, 0.217, 0.403, 0.565, 0.641 },
+    { Qt::Key_9,         K_F3, 0.409, 0.593, 0.565, 0.641 },
+    { Qt::Key_Backspace, K_F4, 0.599, 0.786, 0.565, 0.641 },
+    { Qt::Key_Return,    K_F5, 0.794, 0.974, 0.565, 0.641 },
+
+
+    // =========================================================
+    // ROW G
+    // =========================================================
+
+    { Qt::Key_4,         K_G1, 0.028, 0.211, 0.673, 0.753 },
+    { Qt::Key_5,         K_G2, 0.217, 0.403, 0.673, 0.753 },
+    { Qt::Key_6,         K_G3, 0.409, 0.593, 0.673, 0.754 },
+    { Qt::Key_Asterisk,  K_G4, 0.599, 0.785, 0.673, 0.753 },
+    { Qt::Key_Slash,     K_G5, 0.792, 0.974, 0.673, 0.754 },
+
+
+    // =========================================================
+    // ROW H
+    // =========================================================
+
+    { Qt::Key_1,         K_H1, 0.027, 0.211, 0.787, 0.868 },
+    { Qt::Key_2,         K_H2, 0.217, 0.403, 0.787, 0.869 },
+    { Qt::Key_3,         K_H3, 0.409, 0.593, 0.787, 0.869 },
+    { Qt::Key_Plus,      K_H4, 0.600, 0.785, 0.787, 0.869 },
+    { Qt::Key_Minus,     K_H5, 0.791, 0.972, 0.787, 0.869 },
+
+
+    // =========================================================
+    // ROW I
+    // =========================================================
+
+    { Qt::Key_0,         K_I1, 0.027, 0.211, 0.902, 0.983 },
+    { Qt::Key_Period,    K_I2, 0.217, 0.402, 0.902, 0.983 },
+    { Qt::Key_O,         K_I3, 0.409, 0.593, 0.902, 0.982 },
+    { Qt::Key_N,         K_I4, 0.600, 0.785, 0.902, 0.983 },
+    { Qt::Key_Question,  K_I5, 0.791, 0.969, 0.902, 0.983 },
+
+
+    { 0, 0, 0.0, 0.0, 0.0, 0.0 }
 };
 
-
-struct mousemap
-{
-    int key, keynum;
-    qreal left, right, top, bot;
-} mouseMap[] = {
-
-    { Qt::Key_F1,        38, 0.03, 0.15, 0.03, 0.10 },
-    { Qt::Key_F2,        39, 0.20, 0.32, 0.03, 0.10 },
-    { Qt::Key_F3,        40, 0.345, 0.47, 0.03, 0.10 },
-    { Qt::Key_F4,        41, 0.52, 0.63, 0.03, 0.10 },
-    { Qt::Key_F5,        42, 0.68, 0.80, 0.03, 0.10 },
-    { Qt::Key_F6,        43, 0.83, 0.95, 0.03, 0.10 },
-
-    { Qt::Key_A,          1, 0.03, 0.15, 0.15, 0.22 },
-    { Qt::Key_B,          2, 0.20, 0.32, 0.15, 0.22 },
-    { Qt::Key_C,          3, 0.345, 0.47, 0.15, 0.22 },
-    { Qt::Key_D,          4, 0.52, 0.63, 0.15, 0.22 },
-    { Qt::Key_E,          5, 0.68, 0.80, 0.15, 0.22 },
-    { Qt::Key_F,          6, 0.83, 0.95, 0.15, 0.22 },
-
-    { Qt::Key_G,          7, 0.03, 0.15, 0.275, 0.345 },
-    { Qt::Key_H,          8, 0.20, 0.32, 0.275, 0.345 },
-    { Qt::Key_I,          9, 0.345, 0.47, 0.275, 0.345 },
-    { Qt::Key_J,         10, 0.52, 0.63, 0.275, 0.345 },
-    { Qt::Key_K,         11, 0.68, 0.80, 0.275, 0.345 },
-    { Qt::Key_L,         12, 0.83, 0.95, 0.275, 0.345 },
-
-    { Qt::Key_Return,    13, 0.03, 0.32, 0.40, 0.47 },
-    { Qt::Key_M,         14, 0.345, 0.47, 0.40, 0.47 },
-    { Qt::Key_N,         15, 0.51, 0.64, 0.40, 0.47 },
-    { Qt::Key_O,         16, 0.68, 0.80, 0.40, 0.47 },
-    { Qt::Key_Backspace, 17, 0.83, 0.95, 0.40, 0.47 },
-
-    { Qt::Key_Up,        18, 0.03, 0.15, 0.52, 0.59 },
-    { Qt::Key_7,         19, 0.23, 0.36, 0.52, 0.59 },
-    { Qt::Key_8,         20, 0.42, 0.56, 0.52, 0.59 },
-    { Qt::Key_9,         21, 0.62, 0.75, 0.52, 0.59 },
-    { Qt::Key_Slash,     22, 0.81, 0.95, 0.52, 0.59 },
-
-    { Qt::Key_Down,      23, 0.03, 0.15, 0.645, 0.715 },
-    { Qt::Key_4,         24, 0.23, 0.36, 0.645, 0.715 },
-    { Qt::Key_5,         25, 0.42, 0.56, 0.645, 0.715 },
-    { Qt::Key_6,         26, 0.62, 0.75, 0.645, 0.715 },
-    { Qt::Key_Asterisk,  27, 0.81, 0.95, 0.645, 0.715 },
-
-    { Qt::Key_Alt,       28, 0.028, 0.145, 0.77, 0.84 },
-    { Qt::Key_1,         29, 0.23, 0.36, 0.77, 0.84 },
-    { Qt::Key_2,         30, 0.42, 0.56, 0.77, 0.84 },
-    { Qt::Key_3,         31, 0.62, 0.75, 0.77, 0.84 },
-    { Qt::Key_Minus,     32, 0.81, 0.95, 0.77, 0.84 },
-
-    { Qt::Key_Escape,    33, 0.03, 0.15, 0.89, 0.97 },
-    { Qt::Key_0,         34, 0.23, 0.36, 0.89, 0.97 },
-    { Qt::Key_Period,    35, 0.42, 0.55, 0.89, 0.97 },
-    { Qt::Key_Question,  36, 0.62, 0.74, 0.89, 0.97 },
-    { Qt::Key_Plus,      37, 0.81, 0.95, 0.89, 0.97 },
-
-    {                0,  0,      0.0,      0.0,      0.0,      0.0}
-};
+#endif
 
 
 void MainWindow::pushKey(int key)
@@ -724,7 +967,7 @@ void MainWindow::keyPressEvent(QKeyEvent * ev)
             fprintf(stderr, "\n\n\nTests interrupted\n");
         }
     }
-
+#if (KBD_CASIO_50 == 0)
     if (k == Qt::Key_F10)
     {
         static cstring keyboards[] =
@@ -741,7 +984,7 @@ void MainWindow::keyPressEvent(QKeyEvent * ev)
         ui.load_keymap(keyboards[newmap++]);
         newmap %= sizeof(keyboards) / sizeof(keyboards[0]);
     }
-
+#endif
     if (k == Qt::Key_F9)
     {
         const int header_h = 22;
@@ -1000,6 +1243,10 @@ void MainWindow::load_keymap(cstring keymapfile)
 //   A new keymap was loaded, update visible keyboard layout on screen
 // ----------------------------------------------------------------------------
 {
+#if (KBD_CASIO_50 == 1)
+    // Graph 75 keyboard is fixed: ignore keymap image changes.
+    return;
+#else
     QString path = QString::fromUtf8(keymapfile);
     auto apply = [path] {
         QFileInfo fi(path);
@@ -1022,6 +1269,8 @@ void MainWindow::load_keymap(cstring keymapfile)
     });
     while (!done)
         sys_delay(1);
+
+#endif        
 }
 
 
@@ -1733,6 +1982,7 @@ int ui_file_selector(const char *title,
 {
     return 0;
 }
+
 
 
 void ui_save_setting(const char *name, const char *value)

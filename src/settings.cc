@@ -754,6 +754,21 @@ cstring setting::label(object::id ty)
         return printf("StBins %u", s.StatsPlotBins());
     case ID_PlotRefreshRate:
         return printf("Plot%ums", s.PlotRefreshRate());
+
+    case ID_PoffTime:
+        return printf("Poff%us", s.PoffTime());
+ #if (DBxxxx == 1)
+    case ID_TMzone:
+        return printf("TZ %s", cities[s.TMzone()].city );
+ #endif
+        case ID_CpuFreq:
+        return printf("Cpu%uMhz", s.CpuFreq());
+    case ID_BLlevel:
+        return printf("BL %u", s.BLlevel());
+    case ID_BLTime:
+        return printf("BL %us", s.BLTime());
+
+
     default:
         break;
     }
