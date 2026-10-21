@@ -291,6 +291,7 @@ algebraic_p complex::as_rounded_result(int impr) const
 //   Drop imaginary noise that result from complex coefficients
 // ----------------------------------------------------------------------------
 {
+    cleaner purge;
     rectangular_g r = as_rectangular();
     if (!r)
         return nullptr;
@@ -302,11 +303,18 @@ algebraic_p complex::as_rounded_result(int impr) const
         return nullptr;
     im = abs::run(im);
     if (!im || im->is_zero(false) || smaller_magnitude(im, eps))
+    {
+        if (+re != +r)
+            re = purge(re);
         return re;
+    }
     im = im->snap_near_integer(eps);
     if (!im)
         return nullptr;
-    return rectangular::make(re, im);
+    algebraic_p result = rectangular::make(re, im);
+    if (result && +result != +r)
+        result = purge(result);
+    return result;
 }
 
 
@@ -427,10 +435,14 @@ polar_g complex::as_polar() const
 //   Switch to polar form if preferred for computation
 // ----------------------------------------------------------------------------
 {
+    cleaner purge;
     if (type() == ID_rectangular)
     {
         rectangular_g r = rectangular_p(this);
-        return polar::make(r->mod(), r->pifrac(), object::ID_PiRadians);
+        polar_g result = polar::make(r->mod(), r->pifrac(), object::ID_PiRadians);
+        if (result)
+            result = purge(result);
+        return result;
     }
     return polar_p(this);
 }
@@ -441,10 +453,14 @@ rectangular_g complex::as_rectangular() const
 //   Switch to rectangular form if preferred for computation
 // ----------------------------------------------------------------------------
 {
+    cleaner purge;
     if (type() == ID_polar)
     {
         polar_g r = polar_p(this);
-        return rectangular::make(r->re(), r->im());
+        rectangular_g result = rectangular::make(r->re(), r->im());
+        if (result)
+            result = purge(result);
+        return result;
     }
     return rectangular_p(this);
 }
@@ -506,6 +522,18 @@ PARSE_BODY(rectangular)
     unicode cp  = utf8_codepoint(p.source + offs);
     bool    neg = false;
 
+    // Case of -ⅈ or +ⅈ: the sign was parsed as a command, not a real part
+    bool signonly = false;
+    if (re && re->is_command())
+    {
+        id ty = re->type();
+        if (cp != I_MARK || (ty != ID_add && ty != ID_subtract))
+            return SKIP;
+        neg = ty == ID_subtract;
+        signonly = true;
+        re = nullptr;
+    }
+
     // Cases 'a' and 'b'
     if (!re && cp == '(')
     {
@@ -565,8 +593,8 @@ PARSE_BODY(rectangular)
     }
 
     // Cases c, d, e or f
-    bool hadsign = re && (cp == '+' || cp == '-');
-    if (hadsign)
+    bool hadsign = signonly || (re && (cp == '+' || cp == '-'));
+    if (hadsign && !signonly)
     {
         neg = cp == '-';
         if (max <= 1)
@@ -581,10 +609,19 @@ PARSE_BODY(rectangular)
         offs = utf8_next(p.source, offs, max);
         cp = offs < max ? utf8_codepoint(p.source + offs) : 0;
     }
+    // After the ⅈ mark, only a value (number, name, parenthesized or
+    // quoted expression) can follow, otherwise 'ⅈ+1' would swallow '+1'
+    // as the imaginary part
     bool     sp    = utf8_whitespace(cp);
+    bool     dot   = cp == '.' || (cp == ',' && Settings.DecimalComma());
+    bool     more  = imark
+        ? (isdigit(cp) || dot || cp == '(' || cp == '\'' ||
+           is_valid_as_name_initial(cp) ||
+           (re && !hadsign && (cp == '-' || cp == '+')))
+        : !sp;
     size_t   imsz  = max - offs;
-    object_p imobj = sp ? nullptr : parse(p.source + offs, imsz,
-                                          PARENTHESES, p.separator);
+    object_p imobj = more ? parse(p.source + offs, imsz,
+                                  PARENTHESES, p.separator) : nullptr;
     algebraic_g im;
     if (!imobj)
     {
@@ -602,6 +639,8 @@ PARSE_BODY(rectangular)
         p.length = offs;
         return p.out ? OK : ERROR;
     }
+    if (imobj->is_command())
+        return SKIP;            // Case of 2*ⅈ: × is a function, not a value
     im = imobj->as_algebraic();
     if (!im)
         return SKIP;            // Case of 3+"Hello"
@@ -697,6 +736,31 @@ algebraic_p rectangular::is_real() const
 }
 
 
+static algebraic_p strip_outer_neg(expression_r expr)
+// ----------------------------------------------------------------------------
+//   Return the argument of an expression like '-X' without computing
+// ----------------------------------------------------------------------------
+//   Using arithmetic negation here would simplify the expression while
+//   rendering, which can be slow and consume keystrokes through
+//   program::interrupted(), e.g. for the conjugate roots built by PRoot
+{
+    size_t   size  = 0;
+    object_p first = expr->objects(&size);
+    object_p last  = nullptr;
+    size_t   count = 0;
+    for (object_p o : *expr)
+    {
+        last = o;
+        count++;
+    }
+    if (!last || last->type() != object::ID_neg || count < 2)
+        return nullptr;
+    size_t  len   = last - first;
+    gcbytes bytes = byte_p(first);
+    return rt.make<expression>(object::ID_expression, bytes, len);
+}
+
+
 RENDER_BODY(rectangular)
 // ----------------------------------------------------------------------------
 //   Render a complex number in rectangular form
@@ -709,12 +773,18 @@ RENDER_BODY(rectangular)
         return r.printf("Invalid rectangular");
     bool ifirst = r.editing() || Settings.ComplexIBeforeImaginary();
     bool neg  = im->is_negative(false);
-    if (expression_p expr = im->as<expression>())
-        if (object_p obj = expr->outermost_operator())
-            if (obj->type() == ID_neg)
-                neg = true;
     if (neg)
+    {
         im = -im;
+    }
+    else if (expression_g expr = im->as<expression>())
+    {
+        if (algebraic_p arg = strip_outer_neg(expr))
+        {
+            im = arg;
+            neg = true;
+        }
+    }
     if (!re->is_zero(false))
     {
         re->render(r);
@@ -1072,6 +1142,8 @@ COMMAND_BODY(RectangularToReal)
     im = +tag::make("im", im);
     if (!re || !im || !rt.top(re) || !rt.push(im))
         return ERROR;
+    if (!algebraic::list_result(2))
+        return ERROR;
     return OK;
 }
 
@@ -1107,6 +1179,8 @@ COMMAND_BODY(PolarToReal)
     object_g modobj = +tag::make("mod", +mod);
     object_g argobj = +tag::make("arg", +arg);
     if (!modobj || !argobj || !rt.top(modobj) || !rt.push(argobj))
+        return ERROR;
+    if (!algebraic::list_result(2))
         return ERROR;
     return OK;
 }
@@ -1203,6 +1277,8 @@ COMPLEX_BODY(sqrt)
 //   Complex implementation of sqrt
 // ----------------------------------------------------------------------------
 {
+    if (!z)
+        return nullptr;
     id zt = z->type();
     if (zt == ID_polar)
     {
@@ -1251,6 +1327,8 @@ COMPLEX_BODY(cbrt)
 //   Complex implementation of cbrt
 // ----------------------------------------------------------------------------
 {
+    if (!z)
+        return nullptr;
     polar_g p = z->as_polar();
     if (!p)
         return nullptr;
@@ -1368,7 +1446,23 @@ COMPLEX_BODY(atan)
 {
     // atan(z) = -i/2 ln((i-z) / (i + z))
     complex_g i = complex::make(0,1);
-    return complex::ln((i - z) / (i + z)) / complex_g(complex::make(0,2));
+    complex_g d = i + z;
+    if (!d)
+        return nullptr;
+    if (d->is_zero())
+    {
+        rt.domain_error();
+        return nullptr;
+    }
+    complex_g q = (i - z) / d;
+    if (!q)
+        return nullptr;
+    if (q->is_zero())
+    {
+        rt.domain_error();
+        return nullptr;
+    }
+    return complex::ln(q) / complex_g(complex::make(0,2));
 }
 
 
@@ -1377,6 +1471,11 @@ COMPLEX_BODY(asec)
 //   Complex implementation of asec
 // ----------------------------------------------------------------------------
 {
+    if (z->is_zero())
+    {
+        rt.domain_error();
+        return nullptr;
+    }
     return complex::acos(complex::make(1, 0) / z);
 }
 
@@ -1386,6 +1485,11 @@ COMPLEX_BODY(acsc)
 //   Complex implementation of acsc
 // ----------------------------------------------------------------------------
 {
+    if (z->is_zero())
+    {
+        rt.domain_error();
+        return nullptr;
+    }
     return complex::asin(complex::make(1, 0) / z);
 }
 
@@ -1395,6 +1499,11 @@ COMPLEX_BODY(acot)
 //   Complex implementation of acot
 // ----------------------------------------------------------------------------
 {
+    if (z->is_zero())
+    {
+        rt.domain_error();
+        return nullptr;
+    }
     return complex::atan(complex::make(1, 0) / z);
 }
 
@@ -1462,7 +1571,15 @@ COMPLEX_BODY(atanh)
     // atanh(z) = 1/2 ln((1+z) / (1-z))
     complex_g one = complex::make(1, 0);
     complex_g two = complex::make(2, 0);
-    return complex::ln((one + z) / (one - z)) / two;
+    complex_g d = one - z;
+    if (!d)
+        return nullptr;
+    if (d->is_zero())
+    {
+        rt.domain_error();
+        return nullptr;
+    }
+    return complex::ln((one + z) / d) / two;
 }
 
 
@@ -1506,6 +1623,11 @@ COMPLEX_BODY(acsch)
 // ----------------------------------------------------------------------------
 {
     // acsch(z) = ln(1/z + sqrt(1/z^2 + 1))
+    if (z->is_zero())
+    {
+        rt.domain_error();
+        return nullptr;
+    }
     complex_g one = complex::make(1, 0);
     complex_g inv_z = one / z;
     return complex::ln(inv_z + complex::sqrt(inv_z*inv_z + one));
@@ -1518,6 +1640,11 @@ COMPLEX_BODY(asech)
 // ----------------------------------------------------------------------------
 {
     // asech(z) = ln(1/z + sqrt(1/z^2 - 1))
+    if (z->is_zero())
+    {
+        rt.domain_error();
+        return nullptr;
+    }
     complex_g one = complex::make(1, 0);
     complex_g inv_z = one / z;
     return complex::ln(inv_z + complex::sqrt(inv_z*inv_z - one));
@@ -1532,7 +1659,15 @@ COMPLEX_BODY(acoth)
     // acoth(z) = 1/2 ln((z+1) / (z-1))
     complex_g one = complex::make(1, 0);
     complex_g two = complex::make(2, 0);
-    return complex::ln((z + one) / (z - one)) / two;
+    complex_g d = z - one;
+    if (!d)
+        return nullptr;
+    if (d->is_zero())
+    {
+        rt.domain_error();
+        return nullptr;
+    }
+    return complex::ln((z + one) / d) / two;
 }
 
 
@@ -1542,8 +1677,21 @@ COMPLEX_BODY(ln1p)
 // ----------------------------------------------------------------------------
 //   ln1p(a+bi) = 0.5*ln1p(a*(2+a)+b*b) + i*atan2(b, 1+a)
 {
+    if (!z)
+        return nullptr;
     algebraic_g a = z->re();
     algebraic_g b = z->im();
+
+    // Pole at z = -1: |1+z| = 0
+    algebraic_g one = integer::make(1);
+    algebraic_g opa = one + a;
+    if (!opa)
+        return nullptr;
+    if (opa->is_zero(false) && b->is_zero(false))
+    {
+        rt.domain_error();
+        return nullptr;
+    }
 
     // Real part: 0.5 * ln1p(a*(2+a) + b*b)
     algebraic_g two = integer::make(2);
@@ -1551,8 +1699,7 @@ COMPLEX_BODY(ln1p)
 
     // Imaginary part: atan2(b, 1+a) — suppress angle unit on result
     settings::SaveSetAngleUnits ssau(false);
-    algebraic_g one = integer::make(1);
-    algebraic_g im  = atan2::evaluate(b, one + a);
+    algebraic_g im  = atan2::evaluate(b, opa);
 
     return rectangular::make(re, im);
 }
@@ -1591,7 +1738,18 @@ COMPLEX_BODY(ln)
 // ----------------------------------------------------------------------------
 {
     // log(a.exp(ib)) = log(a) + i b
+    if (!z)
+        return nullptr;
     algebraic_g mod = z->mod();
+    if (!mod)
+        return nullptr;
+    if (mod->is_zero(false))
+    {
+        // Pole at 0: do not hand ln(0) back to the real code, which would
+        // promote to complex again with ComplexResults and recurse forever
+        rt.domain_error();
+        return nullptr;
+    }
     algebraic_g arg = z->arg(ID_Rad);
     return rectangular::make(ln::run(mod), arg);
 }
@@ -1626,6 +1784,8 @@ COMPLEX_BODY(exp)
 // ----------------------------------------------------------------------------
 {
     // exp(a+ib) = exp(a)*exp(ib)
+    if (!z)
+        return nullptr;
     algebraic_g re = z->re();
     algebraic_g im = z->im();
     return polar::make(exp::run(re), im, ID_Rad);

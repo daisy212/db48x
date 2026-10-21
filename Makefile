@@ -15,6 +15,8 @@
 ##    make dm42n          : Build for SwissMicros DM42n (called db50x)
 ##    make dm32           : Build for SwissMicros DM32 (called db50x)
 ##    make android        : Build Android App Bundle for Google Play
+##    make android-install: Install DB48x APK to connected Android device
+##    make color-dm32-android-install: Install DB50x APK to connected Android device
 ##    make wasm           : Build WebAssembly (Emscripten: wasm/$(NAME).js)
 ##    make tools          : Build the tools (decimize, crc32, etc)
 ##    make help           : List all targets
@@ -482,11 +484,12 @@ GENERATE_HELP_MD=					\
 	    -e 's/KEEP_IT/$(PRODUCT_MACHINE)/g' 	\
 	    -e 's/DB48X/$(PRODUCT_NAME)/g'	 	\
 	    -e 's/db48x.md/$(NAME).md/g' 		\
-	    -e 's/DM42/$(PRODUCT_MACHINE)/g' > $@
+	    -e 's/DM42/$(PRODUCT_MACHINE)/g' | tr -d '\r' > $@
 
 help/$(NAME).md: $(HELP_SOURCES)
 	$(PRINT_COMMAND) mkdir -p help
 	$(PRINT_GENERATE) $(GENERATE_HELP_MD)
+	$(PRINT_COMMAND) tr -d '\r' < $@ > $@.tmp && mv $@.tmp $@
 	$(PRINT_COMMAND) cp doc/*.png help/ 2>/dev/null || true
 	$(PRINT_COMMAND) mkdir -p help/img
 	$(PRINT_COMMAND) rsync -a --delete doc/img/*.bmp help/img/ 2>/dev/null || true
@@ -517,9 +520,9 @@ QRC_FILES=		sim/config.qrc		\
 			sim/help/img.qrc
 
 # Build Qt simulator directly with qmake
-qt-$(TARGET): $(QMAKEFILE)
+qt-$(TARGET): $(QMAKEFILE) $(QRC_FILES)
 	$(PRINT_COMMAND) $(MAKE) -C $(<D) -f $(<F)
-qt-%: $(QMAKEFILE)
+qt-%: $(QMAKEFILE) $(QRC_FILES)
 	$(PRINT_COMMAND) $(MAKE) -C $(<D) -f $(<F) $*
 
 $(QMAKEFILE): sim/$(NAME).pro $(QRC_FILES) $(MIQ_MAKEDEPS) $(CHUCK_H) .config
@@ -554,18 +557,13 @@ sim/help-$(NAME).qrc: $(MIQ_MAKEDEPS)
 	> $@
 
 
-sim/%.qrc: $(MIQ_MAKEDEPS)
+GEN_QRC=tools/generate-qrc.sh
+sim/%.qrc: $(MIQ_MAKEDEPS) $(GEN_QRC)
 	@mkdir -p $(@D)
-	$(PRINT_GENERATE) (echo '<RCC>';			\
-	 echo ' <qresource prefix="/'$*'">';			\
-	 for I in $(wildcard $(QRC_EXT_$*:%=$*/%)); do		\
-		J=$$(basename $$I);				\
-		echo '  <file alias="'$$J'">../'$(QRC_DOT_$*)$*'/'$$J'</file>';	\
-	 done;							\
-	 echo ' </qresource>';					\
-	 echo '</RCC>')						\
-	> $@
-
+	$(PRINT_GENERATE) $(GEN_QRC) "$*"			\
+				"$(QRC_EXT_$*)"			\
+				"../$(QRC_DOT_$*)$*"		\
+				> $@.$$$$ && mv $@.$$$$ $@
 
 QRC_EXT_config=*.csv *.cfg *.48k
 QRC_EXT_help=$(NAME).md $(NAME).idx
@@ -573,6 +571,14 @@ QRC_EXT_help/img=*.bmp
 QRC_DOT_help/img=../
 QRC_EXT_library=*.48[sS]
 QRC_EXT_state=*.48[sS]
+
+# The pattern rule above lists a directory, but make cannot know that from
+# the rule alone: without these, adding a file leaves the .qrc untouched and
+# the new resource silently absent from the binary.
+sim/config.qrc:   $(wildcard $(QRC_EXT_config:%=config/%))
+sim/state.qrc:    $(wildcard $(QRC_EXT_state:%=state/%))
+sim/library.qrc:  $(wildcard $(QRC_EXT_library:%=library/%))
+sim/help/img.qrc: $(wildcard $(QRC_EXT_help/img:%=help/img/%))
 
 keyboard:				\
 	Keyboard-Layout.png 		\
@@ -604,8 +610,8 @@ sim/keyboard-db48x-old.png: DB48X-Keys/DB48X-Keys.005.png
 
 ifeq ($(KIND),android)
 ANDROID_SDK_ROOT ?= /opt/homebrew/share/android-commandlinetools
-ANDROID_NDK_ROOT ?= $(ANDROID_SDK_ROOT)/ndk/26.1.10909125
-ANDROID_QT_BASE ?= /Volumes/Qt/6.8.1
+ANDROID_NDK_ROOT ?= $(ANDROID_SDK_ROOT)/ndk/27.2.12479018
+ANDROID_QT_BASE ?= /Volumes/Qt/6.10.3
 ANDROID_QT ?= $(ANDROID_QT_BASE)/android_arm64_v8a
 ANDROID_QT_BIN ?= $(ANDROID_QT)/bin
 # Host kit: macOS uses .../macos/bin; Linux CI and typical offline installs use gcc_64
@@ -614,10 +620,20 @@ ANDROID_QT_HOST_SUBDIR_Linux = gcc_64
 ANDROID_QT_HOST_SUBDIR ?= $(or $(ANDROID_QT_HOST_SUBDIR_$(HOST_OS_NAME)),gcc_64)
 ANDROID_DEPLOY_QT ?= $(ANDROID_QT_BASE)/$(ANDROID_QT_HOST_SUBDIR)/bin/androiddeployqt
 ANDROID_KEYSTORE ?= $(HOME)/.local/android_release.keystore
-ANDROID_JAVA_HOME ?= $(or $(JAVA_HOME),					    \
-			$(shell /usr/libexec/java_home -v 17 2>/dev/null || \
-				/usr/libexec/java_home -v 21 2>/dev/null || \
-				true))
+ANDROID_JAVA_DIRS := 							\
+	$(JAVA_HOME)							\
+	$(shell /usr/libexec/java_home -v 17 2>/dev/null) 		\
+	$(shell /usr/libexec/java_home -v 21 2>/dev/null) 		\
+	/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home	\
+	/opt/homebrew/opt/openjdk/libexec/openjdk.jdk/Contents/Home
+
+ANDROID_JAVA_HOME := $(subst /bin/java,,$(firstword $(wildcard $(ANDROID_JAVA_DIRS:%=%/bin/java))))
+
+ifeq ($(ANDROID_JAVA_HOME),)
+$(error Android build requires Java 17 or later. \
+	Install with: brew install openjdk@17 \
+	Or set JAVA_HOME explicitly.)
+endif
 ANDROID_CAN_SIGN := $(and $(wildcard $(ANDROID_KEYSTORE)),$(strip $(ANDROID_KEYSTORE_PASS)))
 ANDROID_DEPLOY_SIGN_FLAGS = $(if $(ANDROID_CAN_SIGN),\
 	--sign $(ANDROID_KEYSTORE) $(NAME) --storepass '$(ANDROID_KEYSTORE_PASS)',)
@@ -627,16 +643,21 @@ QMAKE_ENV = 	export ANDROID_SDK_ROOT=$(ANDROID_SDK_ROOT) ;	\
 		export ANDROID_NDK_ROOT=$(ANDROID_NDK_ROOT) ;	\
 		export KEYSTORE_PATH=$(ANDROID_KEYSTORE) ;	\
 		export JAVA_HOME=$(ANDROID_JAVA_HOME);
-# make-it-quick defaults OUTPUT to the workspace root; keep Android bundles
-# under android/ unless the caller overrides ANDROID_OUTPUT_DIR explicitly.
-ANDROID_OUTPUT_DIR ?= android
+# Each build (db48x, db50x) gets its own output directory so the Gradle
+# project, libs/, and res/ don't cross-contaminate each other.
+ANDROID_OUTPUT_DIR ?= android/$(NAME)
 AAB_FILE=$(ANDROID_OUTPUT_DIR:%=%/)$(NAME).aab
 
 android-$(TARGET): $(AAB_FILE)
 android-%: qt-%
 
 # Additional dependencies for Android build
-$(QMAKEFILE): sim/android/AndroidManifest.xml sim/android/build.gradle
+$(QMAKEFILE):	sim/android/db48x/AndroidManifest.xml			\
+		sim/android/db48x/build.gradle				\
+		sim/android/db48x/src/org/db48x/DB48xActivity.java	\
+		sim/android/db50x/AndroidManifest.xml			\
+		sim/android/db50x/build.gradle				\
+		sim/android/db50x/src/org/db50x/DB50xActivity.java
 
 # Deploy (and optionally sign) the AAB via androiddeployqt. androiddeployqt
 # expects a build directory as --output and the .so staged under
@@ -648,6 +669,7 @@ $(AAB_FILE): $(QMAKEFILE) qt-$(TARGET)
 		AAB="$(abspath $@)";					\
 		OUTDIR="$(abspath $(dir $@))";				\
 		mkdir -p "$$OUTDIR" &&					\
+		rm -f "$$OUTDIR/AndroidManifest.xml" &&			\
 		cd sim && 						\
 		$(MAKE) -f $(<F)  install INSTALL_ROOT="$$OUTDIR" &&	\
 		$(QMAKE_ENV)						\
@@ -657,12 +679,62 @@ $(AAB_FILE): $(QMAKEFILE) qt-$(TARGET)
 		  $(ANDROID_DEPLOY_SIGN_FLAGS) &&			\
 		if [ ! -f "$$AAB" ]; then				\
 			BUILT_AAB="$$(find "$$OUTDIR" -type f -name '*.aab' | sort | tail -1)"; \
-			[ -n "$$BUILT_AAB" ] && cp "$$BUILT_AAB" "$$AAB"; \
-		fi &&						\
+			[ -n "$$BUILT_AAB" ] && cp "$$BUILT_AAB" "$$AAB" || :; \
+		fi &&							\
+		(cd "$$OUTDIR" && ./gradlew assembleDebug) &&		\
+		BUILT_APK="$$(find "$$OUTDIR" -path '*/apk/debug/*-debug.apk' | head -1)"; \
+		{ [ -n "$$BUILT_APK" ] && cp "$$BUILT_APK" "$(abspath $(ANDROID_OUTPUT_DIR)/$(NAME)-debug.apk)" || :; }; \
 		test -f "$$AAB"
 	$(if $(ANDROID_CAN_SIGN),,$(PRINT_COMMAND) $(INFO) "[WARNING]" "Android AAB is UNSIGNED (need $(ANDROID_KEYSTORE) and ANDROID_KEYSTORE_PASS). Not for Play Store.")
 
 endif
+
+
+#------------------------------------------------------------------------------
+# Android device installation
+#------------------------------------------------------------------------------
+
+ANDROID_SDK_ROOT_INSTALL ?= /opt/homebrew/share/android-commandlinetools
+ADB ?= $(ANDROID_SDK_ROOT_INSTALL)/platform-tools/adb
+ANDROID_APK_DB48X ?= android/db48x/build/outputs/apk/debug/db48x-debug.apk
+ANDROID_APK_DB50X ?= android/db50x/build/outputs/apk/debug/db50x-debug.apk
+
+define android_install
+	@if [ -n "$(ANDROID_SERIAL)" ]; then					\
+		DEVICE="$(ANDROID_SERIAL)";					\
+	else									\
+		DEVICES="$$($(ADB) devices 2>/dev/null | awk 'NR>1 && $$2=="device" {print $$1}')"; \
+		if [ -z "$$DEVICES" ]; then					\
+			echo "No authorized Android device found.";		\
+			echo "Check that:";					\
+			echo "  1. The phone is connected via USB";		\
+			echo "  2. USB debugging is enabled (Settings > Developer options)"; \
+			echo "  3. You have accepted the USB debugging dialog on the phone"; \
+			echo "     (run '$(ADB) devices' to trigger the prompt)"; \
+			exit 1;							\
+		fi;								\
+		COUNT=$$(echo "$$DEVICES" | wc -l | tr -d ' ');			\
+		if [ "$$COUNT" -gt 1 ]; then					\
+			echo "Multiple devices found:";				\
+			echo "$$DEVICES";					\
+			echo "Set ANDROID_SERIAL=<device-id> to select one.";	\
+			exit 1;							\
+		fi;								\
+		DEVICE=$$(echo "$$DEVICES" | head -1);				\
+	fi;									\
+	echo "Installing $(1) on $$DEVICE...";					\
+	$(ADB) -s "$$DEVICE" shell am force-stop org.db48x 2>/dev/null || true;	\
+	$(ADB) -s "$$DEVICE" shell am force-stop org.db50x 2>/dev/null || true;	\
+	$(ADB) -s "$$DEVICE" install -r $(1)
+endef
+
+android-install: $(ANDROID_APK_DB48X)
+	$(call android_install,$(ANDROID_APK_DB48X))
+
+color-dm32-android-install: $(ANDROID_APK_DB50X)
+	$(call android_install,$(ANDROID_APK_DB50X))
+
+.PHONY: android-install color-dm32-android-install
 
 
 # ------------------------------------------------------------------------------
@@ -737,7 +809,7 @@ TAR_EXTRA_FILES=	   				\
 	    help/*.bmp help/*/*.bmp			\
 	    state/*.48[sSbB]				\
 	    config/*.csv config/*.48k config/*.cfg	\
-	    library/*.48[sSbB]
+	    library/*.48[sSbB] library/*/*.48[sSbB]
 
 PRINT_INSTALL=$(PRINT_COMMAND) $(INFO) "[INSTALL]" "$(NAME) => $(MOUNTPOINT)/" $(COLOR_FILTER);
 PRINT_PACKAGE=$(PRINT_COMMAND) $(INFO) "[PACKAGE]" "$(NAME)-$(VERSION)" $(COLOR_FILTER);

@@ -63,18 +63,20 @@ struct complex : algebraic
         return leb128size(i) + x->size() + y->size();
     }
 
-    algebraic_g x() const
+    algebraic_p xp() const
     {
         algebraic_p p = algebraic_p(payload(this));
         return p;
     }
-    algebraic_g y() const
+    algebraic_p yp() const
     {
         algebraic_p p = algebraic_p(payload(this));
         algebraic_p n = algebraic_p(byte_p(p) + p->size());
         return n;
     }
 
+    algebraic_g         x() const    { return xp(); }
+    algebraic_g         y() const    { return yp(); }
     algebraic_g         re() const;
     algebraic_g         im() const;
     algebraic_g         mod() const;
@@ -104,7 +106,7 @@ struct complex : algebraic
     bool                has_imaginary() const;
     algebraic_p         as_rounded_result(int impr = -1) const;
 
-    enum { I_MARK = L'ⅈ', ANGLE_MARK = L'∡' };
+    enum { I_MARK = U'ⅈ', ANGLE_MARK = U'∡' };
 
 public:
     SIZE_DECL(complex);
@@ -225,11 +227,11 @@ public:
     RENDER_DECL(polar);
 };
 
-COMMAND_DECLARE(RealToRectangular,2);
-COMMAND_DECLARE(RealToPolar,2);
-COMMAND_DECLARE(RectangularToReal,1);
-COMMAND_DECLARE(PolarToReal,1);
-COMMAND_DECLARE(ToRectangular,1);
-COMMAND_DECLARE(ToPolar,1);
+COMMAND_DECLARE_FN(RealToRectangular,2);
+COMMAND_DECLARE_FN(RealToPolar,2);
+COMMAND_DECLARE_FN(RectangularToReal,1);
+COMMAND_DECLARE_FN(PolarToReal,1);
+COMMAND_DECLARE_FN(ToRectangular,1);
+COMMAND_DECLARE_FN(ToPolar,1);
 
 #endif // COMPLEX_H

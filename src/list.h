@@ -303,18 +303,18 @@ struct list : text
 
     // Apply an algebraic function to all elements in list
     list_p        map(object_p prg, size_t recurse) const;
-    list_p        map(algebraic_fn fn, size_t r = ~0U) const;
-    list_p        map(arithmetic_fn fn, algebraic_r y, size_t r = ~0U) const;
-    list_p        map(algebraic_r x, arithmetic_fn fn, size_t r = ~0U) const;
-    static list_p map(algebraic_fn fn, list_r x, size_t recurse = ~0U)
+    list_p        map(algebraic_fn fn, size_t r = SIZE_MAX) const;
+    list_p        map(arithmetic_fn fn, algebraic_r y, size_t r = SIZE_MAX) const;
+    list_p        map(algebraic_r x, arithmetic_fn fn, size_t r = SIZE_MAX) const;
+    static list_p map(algebraic_fn fn, list_r x, size_t recurse = SIZE_MAX)
     {
         return x->map(fn, recurse);
     }
-    static list_p map(arithmetic_fn fn, list_r x, algebraic_r y, size_t r = ~0U)
+    static list_p map(arithmetic_fn fn, list_r x, algebraic_r y, size_t r = SIZE_MAX)
     {
         return x->map(fn, y, r);
     }
-    static list_p map(arithmetic_fn fn, algebraic_r x, list_r y, size_t r = ~0U)
+    static list_p map(arithmetic_fn fn, algebraic_r x, list_r y, size_t r = SIZE_MAX)
     {
         return y->map(x, fn, r);
     }
@@ -374,9 +374,9 @@ struct list : text
 
     // Get a sorted list
     list_p sort() const;
-    list_p sort(int (*compare)(object_p *x, object_p *y)) const;
+    list_p sort(runtime::sort_fn compare) const;
     list_p unique() const;
-    list_p unique(int (*compare)(object_p *x, object_p *y)) const;
+    list_p unique(runtime::sort_fn compare) const;
 
 public:
     // Shared code for parsing and rendering, taking delimiters as input
@@ -445,8 +445,8 @@ inline list_g operator*(list_r x, uint y)
 }
 
 
-int value_compare(object_p *xp, object_p *yp);
-int memory_compare(object_p *xp, object_p *yp);
+int value_compare(object_p x, object_p y);
+int memory_compare(object_p x, object_p y);
 // ----------------------------------------------------------------------------
 //   Value and memory comparison for sorting
 // ----------------------------------------------------------------------------

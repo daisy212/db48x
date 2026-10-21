@@ -657,6 +657,8 @@ static const cstring basic_units[] =
 
     "therm",    "105506000_J",          // EEC therm
     "eV",       "1.60217733E-19_J",     // electron-Volt
+    "Wh",       "3600_J",               // Watt-hour
+    "kWh",      "=",                    // Kilowatt-hour
 
     // ------------------------------------------------------------------------
     // Power menu
@@ -1216,12 +1218,16 @@ algebraic_p unit::map(algebraic_fn fn) const
 //   Map an algebraic function to the value part of the unit
 // ----------------------------------------------------------------------------
 {
+    cleaner purge;
     algebraic_g x = value();
     algebraic_g u = uexpr();
     x             = fn(x);
+    algebraic_p result = nullptr;
     if (x)
-        return unit::simple(x, u);
-    return nullptr;
+        result = unit::simple(x, u);
+    if (result)
+        result = purge(result);
+    return result;
 }
 
 
@@ -1230,11 +1236,15 @@ algebraic_p unit::map(bool (*fn)(algebraic_g &x)) const
 //   Map an algebraic function to an algebraic conversion function
 // ----------------------------------------------------------------------------
 {
+    cleaner purge;
     algebraic_g x = value();
     algebraic_g u = uexpr();
+    algebraic_p result = nullptr;
     if (fn(x))
-        return unit::simple(x, u);
-    return nullptr;
+        result = unit::simple(x, u);
+    if (result)
+        result = purge(result);
+    return result;
 }
 
 
@@ -1513,7 +1523,7 @@ symbol_p unit_file::lookup(gcutf8 what, size_t len, bool menu, bool seek0)
                 c = getchar();
                 if (column == 1 && found)
                 {
-                    byte *buf = rt.allocate(1);
+                    byte *buf = scr.allocate(1);
                     *buf = byte(c);
                 }
             }
@@ -1575,7 +1585,9 @@ symbol_p unit_file::lookup(gcutf8 what, size_t len, bool menu, bool seek0)
             }
             else if (column == 1 && found)
             {
-                byte *buf = rt.allocate(1);
+                byte *buf = scr.allocate(1);
+                if (!buf)
+                    return def;
                 *buf = byte(c);
             }
             index++;
@@ -1633,7 +1645,9 @@ symbol_p unit_file::next(bool menu)
         {
             if (column == 0)
             {
-                byte *buf = rt.allocate(1);
+                byte *buf = scr.allocate(1);
+                if (!buf)
+                    return sym;
                 *buf = byte(c);
             }
         }
@@ -1771,7 +1785,7 @@ MENU_BODY(unit_menu)
 
     for (uint k = 0; k < ui.NUM_SOFTKEYS - (mi.pages > 1); k++)
     {
-        ui.marker(k + 1 * ui.NUM_SOFTKEYS, L'→', true);
+        ui.marker(k + 1 * ui.NUM_SOFTKEYS, U'→', true);
         ui.marker(k + 2 * ui.NUM_SOFTKEYS, '/', false);
     }
 
@@ -1900,7 +1914,7 @@ FUNCTION_BODY(UBase)
                 r = r->evaluate();
                 lobj = r;
             }
-            if (!rt.append(lobj))
+            if (!scr.append(lobj))
                 return nullptr;
 
         }
@@ -2088,7 +2102,7 @@ INSERT_BODY(ApplyInverseUnit)
         unicode c = ui.character_left_of_cursor();
         return ui.insert_softkey(key,
                                  c == '_'                  ? "1/("
-                                 : (c == '/' || c == L'÷') ? "("
+                                 : (c == '/' || c == U'÷') ? "("
                                                            : "/(",
                                  ")",
                                  false);

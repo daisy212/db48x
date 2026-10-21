@@ -33,6 +33,7 @@
 #include "recorder.h"
 #include "settings.h"
 #include "sim-eval.h"
+#include "sim-install.h"
 #include "sim-rpl.h"
 #include "sim-window.h"
 #include "sysmenu.h"
@@ -46,6 +47,7 @@
 #include <QApplication>
 #include <QByteArray>
 #include <QDirIterator>
+#include <QFile>
 #include <QFont>
 #include <QFontDatabase>
 #include <QStandardPaths>
@@ -59,6 +61,8 @@ bool   install     = false;
 bool   no_beep     = false;
 uint   memory_size = MEMORY; // Memory size in kilobytes
 QDir   testDirectory;
+
+extern bool clean_slate;
 
 size_t recorder_render_object(intptr_t tracing,
                               const char *UNUSED /* format */,
@@ -112,10 +116,10 @@ static void copy(const QString &fromName, const QString &toName)
     if (!to.exists())
         to.mkpath(toName);
 
-    for (QDirIterator it(fromName, QDirIterator::Subdirectories);
-         it.hasNext();
-         it.next())
+    QDirIterator it(fromName, QDirIterator::Subdirectories);
+    while (it.hasNext())
     {
+        it.next();
         const auto fi = it.fileInfo();
         if (!fi.isHidden())
         {
@@ -131,11 +135,12 @@ static void copy(const QString &fromName, const QString &toName)
                 auto perms = fi.permissions()
                     | QFile::WriteUser | QFile::WriteOwner;
                 QFile::remove(absPath);
-                QFile::copy(fi.absoluteFilePath(), absPath);
-                QFile::setPermissions(absPath, perms);
+                sim_install_copy_file(fi.absoluteFilePath(), absPath,
+                                      relPath, perms);
             }
         }
     }
+    sim_install_regenerate_help_indices(toName);
 }
 
 
@@ -203,6 +208,7 @@ static void sim_usage(FILE *out, cstring prog)
             "  -N         Disable beeps\n"
             "  -O[test]   Configure test traces without running tests\n"
             "  -T[test]   Run tests (all or one suite, e.g. -Tmatrices)\n"
+            "  -Z         Zero initial state (Clean slate mode)\n"
             "\n"
             "  -E and -F write to stdout with -H, to stderr otherwise.\n"
             "\n"
@@ -241,7 +247,7 @@ static bool sim_parse_args(int argc, char *argv[])
 
         cstring arg = as[2] ? as + 2 : a + 1 < argc ? argv[a + 1] : nullptr;
         uint nargs = 0;
-#define check_arg()     if (!arg) goto missing_arg; nargs = 1;
+#define check_arg()     if (!arg) goto missing_arg; nargs = as[2] == 0;
         switch (as[1])
         {
         case 'C':
@@ -250,7 +256,10 @@ static bool sim_parse_args(int argc, char *argv[])
             break;
         case 'D':
             check_arg();
-            tests::dump_on_fail = arg;
+            if (!*arg || strcmp(arg, "all") == 0)
+                tests::dump_on_fail = ".*";
+            else
+                tests::dump_on_fail = arg;
             break;
 
         case 'd':
@@ -339,6 +348,10 @@ static bool sim_parse_args(int argc, char *argv[])
             tests::default_wait_time = atoi(arg);
             break;
 
+        case 'Z':
+            clean_slate = true;
+            break;
+
         default:
             fprintf(stderr, "Unknown option: %s\n", as);
             return false;
@@ -419,11 +432,28 @@ static void configure_fonts(QApplication &app)
 }
 
 
+#ifdef ANDROID
+#include <android/log.h>
+static unsigned android_recorder_show(const char *text, size_t len, void *)
+// ----------------------------------------------------------------------------
+//   Redirect recorder output to Android logcat
+// ----------------------------------------------------------------------------
+{
+    __android_log_write(ANDROID_LOG_DEBUG, "db48x", text);
+    return len;
+}
+#endif // ANDROID
+
+
 int main(int argc, char *argv[])
 // ----------------------------------------------------------------------------
 //   Main entry point for the simulator
 // ----------------------------------------------------------------------------
 {
+#ifdef ANDROID
+    recorder_configure_show(android_recorder_show);
+#endif // ANDROID
+
     const char *traces = getenv("DB48X_TRACES");
     recorder_trace_set(".*(error|warn(ing)?)s?");
     if (traces)
@@ -531,12 +561,52 @@ int main(int argc, char *argv[])
     QCoreApplication::setOrganizationDomain("48calc.org");
     QCoreApplication::setApplicationName("DB48X");
 
+#ifdef ANDROID
+    // On Android the AppDataLocation is completely inaccessible to the user.
+    // In stead, use what is effectively equivalent to other platforms.
+    // Allow the user to access and handle the files.
+    QString files =
+        QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
+#else
     QString files =
         QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+#endif
+
+    // On Android the mere existence of the application data directory does not
+    // mean the resources were extracted: the Qt bootstrap creates it before we
+    // run, so the existence test never fired and the library was never
+    // installed. Stamp the extracted tree with the version there, and
+    // re-extract whenever that stamp is missing or stale, which also refreshes
+    // the resources when the application is updated in place.
+#ifdef ANDROID
+    QString  stampPath = files + "/.assets-version";
+    QString  wanted    = DB48X_VERSION;
+    QString  found;
+    QFile    stamp(stampPath);
+    if (stamp.open(QIODevice::ReadOnly))
+    {
+        found = QString::fromUtf8(stamp.readAll()).trimmed();
+        stamp.close();
+    }
+    if (getenv("DB48X_INSTALL") || found != wanted)
+        install = true;
+    if (install)
+    {
+        copy(":/", files);
+        if (stamp.open(QIODevice::WriteOnly | QIODevice::Truncate))
+        {
+            stamp.write(wanted.toUtf8());
+            stamp.close();
+        }
+    }
+#else // !ANDROID
+    // On a desktop the data directory is created by us alone, so its absence
+    // still is the right signal, and the version changes at every commit.
     if (getenv("DB48X_INSTALL") || !QDir(files).exists())
         install = true;
     if (install)
         copy(":/", files);
+#endif // ANDROID
     QDir::setCurrent(files);
     QDir::current().mkdir("screens");
 

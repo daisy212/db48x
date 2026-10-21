@@ -50,6 +50,7 @@ struct tests
 //   Run a series of tests
 // ----------------------------------------------------------------------------
 {
+#ifndef WASM
     tests()
         : file(), line(), tstart(),
           tname(), sname(), tindex(), sindex(), cindex(), count(),
@@ -143,6 +144,7 @@ struct tests
     void sum_and_product();
     void polynomials();
     void polynomial_roots();
+    void partial_fractions();
     void quotient_and_remainder();
     void prime_number_tests();
     void exact_quotient();
@@ -279,7 +281,7 @@ struct tests
         NUM_IDS
     };
 
-  protected:
+protected:
     struct failure
     {
         failure(cstring     file,
@@ -368,7 +370,7 @@ public:
     template <typename... Args>
     tests &itest(LENGTHY length, Args... args)
     {
-        save<uint> save(default_wait_time, default_wait_time + length.length);
+        save<uint> save(default_wait_time, adjusted_wait_time(length.length));
         return itest(args...);
     }
 
@@ -485,8 +487,9 @@ public:
     }
 
     bool image_match(cstring file, int x, int y, int w, int h, bool force);
+    uint adjusted_wait_time(uint extrawait);
 
-  protected:
+protected:
     cstring              file;
     uint                 line;
     uint                 tstart;
@@ -505,8 +508,40 @@ public:
     std::vector<failure> failures;
     std::string          explanation;
     std::vector<unicode> terminators;
+#else   // WASM
+    enum keys
+    {
+        // Special stuff
+        TEST_KEYS  = 100,
 
-  public:
+        CLEAR      = 100,       // Clear the calculator state
+        CLEARERR   = 101,       // Clear errors in a flag-independent way
+        NOKEYS     = 102,       // Wait until keys buffer is empty
+        REFRESH    = 103,       // Wait until there is a screen refresh
+        KEYSYNC    = 104,       // Wait for other side to process keys
+        LONGPRESS  = 105,       // Force long press
+        EXIT_PGM   = 106,       // Exiting program
+        SAVE_PGM   = 107,       // Save program on the RPL thread
+        START_TEST = 108,       // Start test (Synchronize battery)
+
+        // Reaching a specific shift state
+        NOSHIFT    = 110,       // Clear shifts
+        LSHIFT     = 111,       // Left shift only
+        RSHIFT     = 112,       // Right shift only
+        RESERVED1  = 113,       // Left + Right shift
+        ALPHA      = 114,       // Set alpha
+        ALPHA_LS   = 115,       // Alpha + left shift
+        ALPHA_RS   = 116,       // Alpha + right shit
+        RESERVED2  = 117,       // Alpha + left shift + right shift
+        LOWERCASE  = 122,       // Lowercase
+        LOWER_LS   = 123,       // Lowercase with left shift
+        LOWER_RS   = 124,       // Lowercase with right shift
+
+    };
+    //
+#endif // WASM
+
+    public:
     static uint          default_wait_time;
     static uint          key_delay_time;
     static uint          refresh_delay_time;
@@ -515,6 +550,7 @@ public:
     static std::string   testing_path;
     static bool          running;
     static bool          simulate_typing;
+    static volatile bool abort_requested;
 };
 
 #define here()          position(__FILE__, __LINE__)

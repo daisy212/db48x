@@ -32,7 +32,9 @@ spellings.
 * `acos` (`arccos`, `cos⁻¹`)
 * `acosh` (`cosh⁻¹`)
 * `acot` (`arccot`, `cot⁻¹`)
+* `acoth` (`coth⁻¹`)
 * `acsc` (`arccsc`, `csc⁻¹`)
+* `acsch` (`csch⁻¹`)
 * `AlarmMenu`
 * `AlgebraMenu`
 * `AllEquationVariables`
@@ -41,7 +43,7 @@ spellings.
 * `AlphaForeground`
 * `Amort` (`TVMAmort`, `TVMAmortize`)
 * `AmortTable` (`AmortizationSchedule`, `TVMAmortizationTable`, `TVMAmortTable`)
-* `And`
+* `and`
 * `AngleMode`
 * `AnglesMenu`
 * `Apply`
@@ -51,6 +53,7 @@ spellings.
 * `ArithmeticMenu`
 * `Arry→` (`Array→`, `FromArray`)
 * `asec` (`arcsec`, `sec⁻¹`)
+* `asech` (`sech⁻¹`)
 * `asin` (`arcsin`, `sin⁻¹`)
 * `asinh` (`sinh⁻¹`)
 * `Asn` (`AssignKey`)
@@ -60,7 +63,9 @@ spellings.
 * `atan` (`arctan`, `tan⁻¹`)
 * `atanh` (`tanh⁻¹`)
 * `Attach`
+* `AutomaticConstants`
 * `AutomaticTemporariesCleanup`
+* `AutomaticXLibs`
 * `AutoScaleStack`
 * `AutoSimplify`
 * `Avg` (`Average`, `Mean`, `ΣMean`)
@@ -83,6 +88,7 @@ spellings.
 * `BeepOff`
 * `BeepOn`
 * `BestFit`
+* `BetaI`
 * `BigFractions`
 * `Bin` (`Binary`)
 * `Bins` (`FrequencyBins`)
@@ -149,10 +155,12 @@ spellings.
 * `cos`
 * `cosh`
 * `cot`
+* `coth`
 * `CountBits`
 * `Cov` (`Covariance`)
 * `CrDir` (`CreateDirectory`, `MkDir`)
 * `csc`
+* `csch`
 * `Cst` (`CustomMenu`)
 * `CstRU` (`RelativeUncertainty`)
 * `CstSU` (`StandardUncertainty`)
@@ -195,6 +203,7 @@ spellings.
 * `Decr` (`Decrement`)
 * `Deg` (`Degrees`)
 * `DelKeys` (`DeleteKeys`)
+* `Depnd` (`DependentVariable`)
 * `Depth`
 * `det` (`Determinant`)
 * `Detach`
@@ -230,6 +239,8 @@ spellings.
 * `DupDup` (`DuplicateTwice`)
 * `DupN` (`DuplicateN`)
 * `D→R` (`DegreesToRadians`, `Degrees→Radians`)
+* `EchelonFormKeepLastColumn`
+* `EchelonFormReduceLastColumn`
 * `Edit`
 * `EditMenu`
 * `EditorBackground`
@@ -256,7 +267,7 @@ spellings.
 * `Eng` (`EngineeringDisplay`)
 * `Eq` (`Equation`)
 * `EqnLib` (`EquationsLibrary`, `EquationsMenu`)
-* `equiv`
+* `Equiv`
 * `erf`
 * `erfc`
 * `err0` (`ClearError`)
@@ -269,14 +280,16 @@ spellings.
 * `ErrorForeground`
 * `Eval` (`Evaluate`)
 * `EvalEq` (`EvaluateEquation`)
-* `Excludes`
+* `excludes`
 * `ExitClearsMenu`
 * `ExitKeepsMenu`
 * `exp`
 * `exp2` (`alog2`)
 * `Expan` (`Expand`)
 * `ExpFit` (`ExponentialFit`)
+* `ExplicitConstants`
 * `ExplicitWildcards`
+* `ExplicitXLibs`
 * `ExpLogIdentitiesMenu`
 * `ExpLogMenu` (`PowersMenu`)
 * `expm` (`expm1`)
@@ -297,6 +310,9 @@ spellings.
 * `FlagsMenu`
 * `FlatMenus`
 * `FlipBit`
+* `FlightRecorderConfigure`
+* `FlightRecorderDump` (`WSLog`)
+* `FlightRecorderDumpSome`
 * `floor`
 * `FoldConstants`
 * `FolderCornerForeground`
@@ -312,6 +328,7 @@ spellings.
 * `FS?S` (`TestFlagSetThenSet`)
 * `Function` (`FunctionPlot`)
 * `GAnd` (`GraphicAnd`)
+* `GammaP`
 * `GC` (`GarbageCollect`)
 * `GCD` (`GreatestCommonDenominator`)
 * `GCIconForeground`
@@ -382,9 +399,10 @@ spellings.
 * `IgnoreSymbolCase`
 * `im`
 * `ImplicitWildcards`
-* `Implies`
+* `implies`
 * `ImproperFractions`
 * `Incr` (`Increment`)
+* `INDEP` (`IndependentVariable`)
 * `IndexDidNotWrap`
 * `IndexWrapped`
 * `InfiniteResultIndicator`
@@ -402,6 +420,8 @@ spellings.
 * `IsPrime`
 * `JDN` (`JulianDayNumber`)
 * `JDN→` (`DateFromJulianDayNumber`)
+* `KeyCode`
+* `KeyEval`
 * `Keys` (`KeyMap`)
 * `Kill`
 * `KillOnError`
@@ -445,6 +465,7 @@ spellings.
 * `LowerCase` (`LowerCaseCommands`)
 * `LowerCaseNames` (`LowerCaseSymbols`)
 * `LR` (`LinearRegression`)
+* `LU` (`LUDecomposition`, `LUFactorization`)
 * `MainMenu`
 * `mant` (`Mantissa`)
 * `MantissaSpacing`
@@ -456,14 +477,14 @@ spellings.
 * `Max`
 * `MaxFactorIterations`
 * `MaxFactorsBits`
-* `MaxLaguerreIterations`
-* `MaxPolynomialDegree`
-* `MaxRootDivisor`
 * `MaxFlags`
 * `MaxH` (`MaximumShowHeight`)
 * `MaximumDecimalExponent`
+* `MaxLaguerreIterations`
 * `MaxNumberBits`
+* `MaxPolynomialDegree`
 * `MaxRewrites`
+* `MaxRootDivisor`
 * `MaxW` (`MaximumShowWidth`)
 * `MaxΣ` (`MaxData`, `ΣMax`)
 * `Median`
@@ -497,6 +518,7 @@ spellings.
 * `NeedToClearErrors`
 * `neg` (`Negate`)
 * `NegativeUnderflowIndicator`
+* `NewStylePolynomials`
 * `NextEq` (`NextEquation`)
 * `NextPr` (`NextPrime`)
 * `Nip`
@@ -514,16 +536,15 @@ spellings.
 * `NoPlotAxes`
 * `NoPositiveUnderflow`
 * `NoProgramLastArguments`
-* `NOr`
+* `nor`
 * `norm`
 * `NormalPolynomialRender`
 * `NoStackAutoScale`
 * `NoStackSave`
-* `not`
+* `Not`
 * `NoTrailingDecimal`
 * `NoUndefinedResult`
 * `NSub`
-* `NewStylePolynomials`
 * `Num` (`CharToUnicode`, `Char→Code`, `Codepoint`)
 * `NumberDotOrComma`
 * `NumberedVariables`
@@ -544,17 +565,21 @@ spellings.
 * `Off` (`PowerOff`)
 * `OffWithImage` (`PowerOffWithImage`)
 * `OnesComplement`
-* `or`
+* `Or`
+* `Order`
 * `Over`
 * `OverflowError`
 * `OverflowIndicator`
 * `OverflowValue`
 * `PackedBitmaps`
 * `Parametric` (`ParametricPlot`)
+* `PartFrac` (`PartialFractions`)
 * `PartsMenu`
 * `Path` (`DirectoryPath`)
+* `PCoef` (`PolynomialCoefficients`)
 * `PCov` (`PopulationCovariance`)
 * `perm` (`Permutations`)
+* `PEval` (`PolynomialEvaluation`)
 * `PgAll` (`PurgeAll`)
 * `PgDir` (`PurgeDirectory`, `RmDir`)
 * `Pi` (`π`)
@@ -578,9 +603,6 @@ spellings.
 * `PositiveUnderflowIndicator`
 * `PowerVoltage`
 * `PPar` (`PlotParameters`)
-* `PCoef` (`PolynomialCoefficients`)
-* `PEval` (`PolynomialEvaluation`)
-* `PRoot` (`PolynomialRoots`)
 * `PrcRnd` (`PrecisionRound`)
 * `Prec` (`Precision`)
 * `PredX` (`PredictX`)
@@ -593,6 +615,7 @@ spellings.
 * `ProgramLastArguments`
 * `ProgramMenu`
 * `Prompt`
+* `PRoot` (`PolynomialRoots`)
 * `PSDev` (`PopulationStandardDeviation`)
 * `Purge`
 * `PushEvaluatedAssignment`
@@ -602,7 +625,8 @@ spellings.
 * `PVar` (`PopulationVariance`)
 * `PwrFit` (`PowerFit`)
 * `P→R` (`PolarToReal`, `Polarℂ→ℝ`)
-* `QuickSort`
+* `QSort` (`QuickSort`)
+* `QuickUnique`
 * `Quote`
 * `Rad` (`Radians`)
 * `rand` (`RandomNumber`)
@@ -610,7 +634,7 @@ spellings.
 * `RandomGeneratorBits`
 * `RandomGeneratorOrder`
 * `RangeMenu`
-* `Range→` (`FromRange`)
+* `Range→` (`FromRange`, `RangeToReal`)
 * `RanM` (`RandomArray`, `RandomMatrix`)
 * `RcEq` (`RecallEquation`)
 * `Rcl` (`Recall`)
@@ -629,6 +653,7 @@ spellings.
 * `RealResults`
 * `Rect` (`DrawRectangle`)
 * `Reduce` (`Stream`)
+* `REF` (`RowEchelonForm`)
 * `RelRnd` (`RelativeRound`)
 * `rem`
 * `ReorderTerms`
@@ -665,6 +690,9 @@ spellings.
 * `RRB` (`RotateRightByte`)
 * `RRC` (`RotateRightCount`)
 * `RRect` (`DrawRoundedRectangle`)
+* `RREF` (`RowReducedEchelonForm`)
+* `RREFMOD` (`RowReducedEchelonFormModulo`)
+* `RREFP` (`RowReducedEchelonFormPivots`, `RREFPivots`)
 * `RSwp` (`RowSwap`)
 * `Run`
 * `RunningIconForeground`
@@ -690,6 +718,9 @@ spellings.
 * `SearchBackground`
 * `SearchForeground`
 * `sec`
+* `sech`
+* `SelfTest` (`AutoTest`)
+* `SelfTests` (`AutoTests`)
 * `SelectedMenuForeground`
 * `SelectionBackground`
 * `SelectionForeground`
@@ -780,7 +811,7 @@ spellings.
 * `StoKeys` (`StoreKeys`)
 * `StoreAtEnd`
 * `StoreAtStart`
-* `StoVX` (`StoreAlgebraVariable`, `Storeⓧ`, `STOVX`)
+* `StoVX` (`StoreAlgebraVariable`, `Storeⓧ`)
 * `StoΣ` (`StoreData`, `StoreΣ`)
 * `StrictArrayResizing`
 * `Str→` (`Compile`, `Text→`)
@@ -847,7 +878,7 @@ spellings.
 * `TrailingDecimal`
 * `Tran` (`Transpose`)
 * `TrigIdentitiesMenu`
-* `TrigSin`
+* `TRIGSIN`
 * `Trn` (`TransConjugate`)
 * `Trnc` (`Truncate`)
 * `True`
@@ -890,6 +921,7 @@ spellings.
 * `Undo`
 * `Unimplemented`
 * `UnimplementedForeground`
+* `Unique`
 * `UnitsConversionsMenu`
 * `UnitsMenu`
 * `UnitsSIPrefixCycle`
@@ -899,6 +931,10 @@ spellings.
 * `UpperCase` (`UpperCaseCommands`)
 * `UpperCaseNames` (`UpperCaseSymbols`)
 * `USBPowered`
+* `UTPC`
+* `UTPF`
+* `UTPN`
+* `UTPT`
 * `UseCrossForMultiplication`
 * `UseDotForMultiplication`
 * `UserCommandBackground`
@@ -921,16 +957,16 @@ spellings.
 * `VerticalProgramRendering`
 * `VerticalVectors`
 * `VoltageForeground`
-* `VX` (`AlgebraVariable`, `RclVX`, `RCLVX`, `ⓧ`)
+* `VX` (`AlgebraVariable`, `RclVX`, `ⓧ`)
 * `V→` (`FromVector`, `Vector→`)
 * `Wait`
 * `XCol` (`IndependentColumn`)
 * `XLib` (`LibraryItem`)
 * `XLibName` (`ConstantName`, `EquationName`)
 * `XLibValue` (`ConstantValue`, `EquationValue`)
-* `xor`
+* `Xor`
 * `xpon` (`Exponent`)
-* `XQ` (`ToQuotient`, `→QPi`, `→Qπ`)
+* `XQ` (`ToQuotient`, `→QPi`, `→Qπ`, `→ℚπ`)
 * `XRng` (`PlotXRange`, `XRange`)
 * `xroot`
 * `XVars` (`ExpressionVariables`)
@@ -944,6 +980,7 @@ spellings.
 * `ZeroOverZeroIsUndefined`
 * `ZeroPowerZeroIsOne`
 * `ZeroPowerZeroIsUndefined`
+* `Zeros`
 * `|` (`Where`)
 * `Γ` (`Gamma`, `tgamma`)
 * `Σ` (`Sum`)
@@ -1018,7 +1055,9 @@ spellings.
 * `acos`
 * `acosh`
 * `acot`
+* `acoth`
 * `acsc`
+* `acsch`
 * `AlarmMenu`
 * `AlgebraMenu`
 * `AllEquationVariables`
@@ -1027,7 +1066,7 @@ spellings.
 * `AlphaForeground`
 * `Amort`
 * `AmortTable`
-* `And`
+* `and`
 * `AngleMode`
 * `AnglesMenu`
 * `Apply`
@@ -1037,6 +1076,7 @@ spellings.
 * `ArithmeticMenu`
 * `Arry→`
 * `asec`
+* `asech`
 * `asin`
 * `asinh`
 * `Asn`
@@ -1046,7 +1086,9 @@ spellings.
 * `atan`
 * `atanh`
 * `Attach`
+* `AutomaticConstants`
 * `AutomaticTemporariesCleanup`
+* `AutomaticXLibs`
 * `AutoScaleStack`
 * `AutoSimplify`
 * `Avg`
@@ -1069,6 +1111,7 @@ spellings.
 * `BeepOff`
 * `BeepOn`
 * `BestFit`
+* `BetaI`
 * `BigFractions`
 * `Bin`
 * `Bins`
@@ -1135,10 +1178,12 @@ spellings.
 * `cos`
 * `cosh`
 * `cot`
+* `coth`
 * `CountBits`
 * `Cov`
 * `CrDir`
 * `csc`
+* `csch`
 * `Cst`
 * `CstRU`
 * `CstSU`
@@ -1181,6 +1226,7 @@ spellings.
 * `Decr`
 * `Deg`
 * `DelKeys`
+* `Depnd`
 * `Depth`
 * `det`
 * `Detach`
@@ -1216,6 +1262,8 @@ spellings.
 * `DupDup`
 * `DupN`
 * `D→R`
+* `EchelonFormKeepLastColumn`
+* `EchelonFormReduceLastColumn`
 * `Edit`
 * `EditMenu`
 * `EditorBackground`
@@ -1242,7 +1290,7 @@ spellings.
 * `Eng`
 * `Eq`
 * `EqnLib`
-* `equiv`
+* `Equiv`
 * `erf`
 * `erfc`
 * `err0`
@@ -1255,14 +1303,16 @@ spellings.
 * `ErrorForeground`
 * `Eval`
 * `EvalEq`
-* `Excludes`
+* `excludes`
 * `ExitClearsMenu`
 * `ExitKeepsMenu`
 * `exp`
 * `exp2`
 * `Expan`
 * `ExpFit`
+* `ExplicitConstants`
 * `ExplicitWildcards`
+* `ExplicitXLibs`
 * `ExpLogIdentitiesMenu`
 * `ExpLogMenu`
 * `expm`
@@ -1283,6 +1333,9 @@ spellings.
 * `FlagsMenu`
 * `FlatMenus`
 * `FlipBit`
+* `FlightRecorderConfigure`
+* `FlightRecorderDump`
+* `FlightRecorderDumpSome`
 * `floor`
 * `FoldConstants`
 * `FolderCornerForeground`
@@ -1298,6 +1351,7 @@ spellings.
 * `FS?S`
 * `Function`
 * `GAnd`
+* `GammaP`
 * `GC`
 * `GCD`
 * `GCIconForeground`
@@ -1368,9 +1422,10 @@ spellings.
 * `IgnoreSymbolCase`
 * `im`
 * `ImplicitWildcards`
-* `Implies`
+* `implies`
 * `ImproperFractions`
 * `Incr`
+* `INDEP`
 * `IndexDidNotWrap`
 * `IndexWrapped`
 * `InfiniteResultIndicator`
@@ -1388,6 +1443,8 @@ spellings.
 * `IsPrime`
 * `JDN`
 * `JDN→`
+* `KeyCode`
+* `KeyEval`
 * `Keys`
 * `Kill`
 * `KillOnError`
@@ -1431,6 +1488,7 @@ spellings.
 * `LowerCase`
 * `LowerCaseNames`
 * `LR`
+* `LU`
 * `MainMenu`
 * `mant`
 * `MantissaSpacing`
@@ -1442,14 +1500,14 @@ spellings.
 * `Max`
 * `MaxFactorIterations`
 * `MaxFactorsBits`
-* `MaxLaguerreIterations`
-* `MaxPolynomialDegree`
-* `MaxRootDivisor`
 * `MaxFlags`
 * `MaxH`
 * `MaximumDecimalExponent`
+* `MaxLaguerreIterations`
 * `MaxNumberBits`
+* `MaxPolynomialDegree`
 * `MaxRewrites`
+* `MaxRootDivisor`
 * `MaxW`
 * `MaxΣ`
 * `Median`
@@ -1483,6 +1541,7 @@ spellings.
 * `NeedToClearErrors`
 * `neg`
 * `NegativeUnderflowIndicator`
+* `NewStylePolynomials`
 * `NextEq`
 * `NextPr`
 * `Nip`
@@ -1500,16 +1559,15 @@ spellings.
 * `NoPlotAxes`
 * `NoPositiveUnderflow`
 * `NoProgramLastArguments`
-* `NOr`
+* `nor`
 * `norm`
 * `NormalPolynomialRender`
 * `NoStackAutoScale`
 * `NoStackSave`
-* `not`
+* `Not`
 * `NoTrailingDecimal`
 * `NoUndefinedResult`
 * `NSub`
-* `NewStylePolynomials`
 * `Num`
 * `NumberDotOrComma`
 * `NumberedVariables`
@@ -1530,17 +1588,21 @@ spellings.
 * `Off`
 * `OffWithImage`
 * `OnesComplement`
-* `or`
+* `Or`
+* `Order`
 * `Over`
 * `OverflowError`
 * `OverflowIndicator`
 * `OverflowValue`
 * `PackedBitmaps`
 * `Parametric`
+* `PartFrac`
 * `PartsMenu`
 * `Path`
+* `PCoef`
 * `PCov`
 * `perm`
+* `PEval`
 * `PgAll`
 * `PgDir`
 * `Pi`
@@ -1576,6 +1638,7 @@ spellings.
 * `ProgramLastArguments`
 * `ProgramMenu`
 * `Prompt`
+* `PRoot`
 * `PSDev`
 * `Purge`
 * `PushEvaluatedAssignment`
@@ -1585,7 +1648,8 @@ spellings.
 * `PVar`
 * `PwrFit`
 * `P→R`
-* `QuickSort`
+* `QSort`
+* `QuickUnique`
 * `Quote`
 * `Rad`
 * `rand`
@@ -1612,6 +1676,7 @@ spellings.
 * `RealResults`
 * `Rect`
 * `Reduce`
+* `REF`
 * `RelRnd`
 * `rem`
 * `ReorderTerms`
@@ -1648,6 +1713,9 @@ spellings.
 * `RRB`
 * `RRC`
 * `RRect`
+* `RREF`
+* `RREFMOD`
+* `RREFP`
 * `RSwp`
 * `Run`
 * `RunningIconForeground`
@@ -1673,6 +1741,9 @@ spellings.
 * `SearchBackground`
 * `SearchForeground`
 * `sec`
+* `sech`
+* `SelfTest`
+* `SelfTests`
 * `SelectedMenuForeground`
 * `SelectionBackground`
 * `SelectionForeground`
@@ -1830,7 +1901,7 @@ spellings.
 * `TrailingDecimal`
 * `Tran`
 * `TrigIdentitiesMenu`
-* `TrigSin`
+* `TRIGSIN`
 * `Trn`
 * `Trnc`
 * `True`
@@ -1873,6 +1944,7 @@ spellings.
 * `Undo`
 * `Unimplemented`
 * `UnimplementedForeground`
+* `Unique`
 * `UnitsConversionsMenu`
 * `UnitsMenu`
 * `UnitsSIPrefixCycle`
@@ -1882,6 +1954,10 @@ spellings.
 * `UpperCase`
 * `UpperCaseNames`
 * `USBPowered`
+* `UTPC`
+* `UTPF`
+* `UTPN`
+* `UTPT`
 * `UseCrossForMultiplication`
 * `UseDotForMultiplication`
 * `UserCommandBackground`
@@ -1911,7 +1987,7 @@ spellings.
 * `XLib`
 * `XLibName`
 * `XLibValue`
-* `xor`
+* `Xor`
 * `xpon`
 * `XQ`
 * `XRng`
@@ -1927,6 +2003,7 @@ spellings.
 * `ZeroOverZeroIsUndefined`
 * `ZeroPowerZeroIsOne`
 * `ZeroPowerZeroIsUndefined`
+* `Zeros`
 * `|`
 * `Γ`
 * `Σ`
@@ -2001,7 +2078,9 @@ spellings.
 * `acos`
 * `acosh`
 * `acot`
+* `acoth`
 * `acsc`
+* `acsch`
 * `AlarmMenu`
 * `AlgebraMenu`
 * `AllEquationVariables`
@@ -2010,7 +2089,7 @@ spellings.
 * `AlphaForeground`
 * `Amort`
 * `AmortTable`
-* `And`
+* `and`
 * `AngleMode`
 * `AnglesMenu`
 * `Apply`
@@ -2020,6 +2099,7 @@ spellings.
 * `ArithmeticMenu`
 * `Arry→`
 * `asec`
+* `asech`
 * `asin`
 * `asinh`
 * `Asn`
@@ -2029,7 +2109,9 @@ spellings.
 * `atan`
 * `atanh`
 * `Attach`
+* `AutomaticConstants`
 * `AutomaticTemporariesCleanup`
+* `AutomaticXLibs`
 * `AutoScaleStack`
 * `AutoSimplify`
 * `Avg`
@@ -2052,6 +2134,7 @@ spellings.
 * `BeepOff`
 * `BeepOn`
 * `BestFit`
+* `BetaI`
 * `BigFractions`
 * `Bin`
 * `Bins`
@@ -2118,10 +2201,12 @@ spellings.
 * `cos`
 * `cosh`
 * `cot`
+* `coth`
 * `CountBits`
 * `Cov`
 * `CrDir`
 * `csc`
+* `csch`
 * `Cst`
 * `CstRU`
 * `CstSU`
@@ -2164,6 +2249,7 @@ spellings.
 * `Decr`
 * `Deg`
 * `DelKeys`
+* `Depnd`
 * `Depth`
 * `det`
 * `Detach`
@@ -2199,6 +2285,8 @@ spellings.
 * `DupDup`
 * `DupN`
 * `D→R`
+* `EchelonFormKeepLastColumn`
+* `EchelonFormReduceLastColumn`
 * `Edit`
 * `EditMenu`
 * `EditorBackground`
@@ -2225,7 +2313,7 @@ spellings.
 * `Eng`
 * `Eq`
 * `EqnLib`
-* `equiv`
+* `Equiv`
 * `erf`
 * `erfc`
 * `err0`
@@ -2238,14 +2326,16 @@ spellings.
 * `ErrorForeground`
 * `Eval`
 * `EvalEq`
-* `Excludes`
+* `excludes`
 * `ExitClearsMenu`
 * `ExitKeepsMenu`
 * `exp`
 * `exp2`
 * `Expan`
 * `ExpFit`
+* `ExplicitConstants`
 * `ExplicitWildcards`
+* `ExplicitXLibs`
 * `ExpLogIdentitiesMenu`
 * `ExpLogMenu`
 * `expm`
@@ -2266,6 +2356,9 @@ spellings.
 * `FlagsMenu`
 * `FlatMenus`
 * `FlipBit`
+* `FlightRecorderConfigure`
+* `FlightRecorderDump`
+* `FlightRecorderDumpSome`
 * `floor`
 * `FoldConstants`
 * `FolderCornerForeground`
@@ -2281,6 +2374,7 @@ spellings.
 * `FS?S`
 * `Function`
 * `GAnd`
+* `GammaP`
 * `GC`
 * `GCD`
 * `GCIconForeground`
@@ -2351,9 +2445,10 @@ spellings.
 * `IgnoreSymbolCase`
 * `im`
 * `ImplicitWildcards`
-* `Implies`
+* `implies`
 * `ImproperFractions`
 * `Incr`
+* `INDEP`
 * `IndexDidNotWrap`
 * `IndexWrapped`
 * `InfiniteResultIndicator`
@@ -2371,6 +2466,8 @@ spellings.
 * `IsPrime`
 * `JDN`
 * `JDN→`
+* `KeyCode`
+* `KeyEval`
 * `Keys`
 * `Kill`
 * `KillOnError`
@@ -2414,6 +2511,7 @@ spellings.
 * `LowerCase`
 * `LowerCaseNames`
 * `LR`
+* `LU`
 * `MainMenu`
 * `mant`
 * `MantissaSpacing`
@@ -2425,14 +2523,14 @@ spellings.
 * `Max`
 * `MaxFactorIterations`
 * `MaxFactorsBits`
-* `MaxLaguerreIterations`
-* `MaxPolynomialDegree`
-* `MaxRootDivisor`
 * `MaxFlags`
 * `MaxH`
 * `MaximumDecimalExponent`
+* `MaxLaguerreIterations`
 * `MaxNumberBits`
+* `MaxPolynomialDegree`
 * `MaxRewrites`
+* `MaxRootDivisor`
 * `MaxW`
 * `MaxΣ`
 * `Median`
@@ -2466,6 +2564,7 @@ spellings.
 * `NeedToClearErrors`
 * `neg`
 * `NegativeUnderflowIndicator`
+* `NewStylePolynomials`
 * `NextEq`
 * `NextPr`
 * `Nip`
@@ -2483,16 +2582,15 @@ spellings.
 * `NoPlotAxes`
 * `NoPositiveUnderflow`
 * `NoProgramLastArguments`
-* `NOr`
+* `nor`
 * `norm`
 * `NormalPolynomialRender`
 * `NoStackAutoScale`
 * `NoStackSave`
-* `not`
+* `Not`
 * `NoTrailingDecimal`
 * `NoUndefinedResult`
 * `NSub`
-* `NewStylePolynomials`
 * `Num`
 * `NumberDotOrComma`
 * `NumberedVariables`
@@ -2513,17 +2611,21 @@ spellings.
 * `Off`
 * `OffWithImage`
 * `OnesComplement`
-* `or`
+* `Or`
+* `Order`
 * `Over`
 * `OverflowError`
 * `OverflowIndicator`
 * `OverflowValue`
 * `PackedBitmaps`
 * `Parametric`
+* `PartFrac`
 * `PartsMenu`
 * `Path`
+* `PCoef`
 * `PCov`
 * `perm`
+* `PEval`
 * `PgAll`
 * `PgDir`
 * `Pi`
@@ -2559,6 +2661,7 @@ spellings.
 * `ProgramLastArguments`
 * `ProgramMenu`
 * `Prompt`
+* `PRoot`
 * `PSDev`
 * `Purge`
 * `PushEvaluatedAssignment`
@@ -2568,7 +2671,8 @@ spellings.
 * `PVar`
 * `PwrFit`
 * `P→R`
-* `QuickSort`
+* `QSort`
+* `QuickUnique`
 * `Quote`
 * `Rad`
 * `rand`
@@ -2595,6 +2699,7 @@ spellings.
 * `RealResults`
 * `Rect`
 * `Reduce`
+* `REF`
 * `RelRnd`
 * `rem`
 * `ReorderTerms`
@@ -2631,6 +2736,9 @@ spellings.
 * `RRB`
 * `RRC`
 * `RRect`
+* `RREF`
+* `RREFMOD`
+* `RREFP`
 * `RSwp`
 * `Run`
 * `RunningIconForeground`
@@ -2656,6 +2764,9 @@ spellings.
 * `SearchBackground`
 * `SearchForeground`
 * `sec`
+* `sech`
+* `SelfTest`
+* `SelfTests`
 * `SelectedMenuForeground`
 * `SelectionBackground`
 * `SelectionForeground`
@@ -2813,7 +2924,7 @@ spellings.
 * `TrailingDecimal`
 * `Tran`
 * `TrigIdentitiesMenu`
-* `TrigSin`
+* `TRIGSIN`
 * `Trn`
 * `Trnc`
 * `True`
@@ -2856,6 +2967,7 @@ spellings.
 * `Undo`
 * `Unimplemented`
 * `UnimplementedForeground`
+* `Unique`
 * `UnitsConversionsMenu`
 * `UnitsMenu`
 * `UnitsSIPrefixCycle`
@@ -2865,6 +2977,10 @@ spellings.
 * `UpperCase`
 * `UpperCaseNames`
 * `USBPowered`
+* `UTPC`
+* `UTPF`
+* `UTPN`
+* `UTPT`
 * `UseCrossForMultiplication`
 * `UseDotForMultiplication`
 * `UserCommandBackground`
@@ -2894,7 +3010,7 @@ spellings.
 * `XLib`
 * `XLibName`
 * `XLibValue`
-* `xor`
+* `Xor`
 * `xpon`
 * `XQ`
 * `XRng`
@@ -2910,6 +3026,7 @@ spellings.
 * `ZeroOverZeroIsUndefined`
 * `ZeroPowerZeroIsOne`
 * `ZeroPowerZeroIsUndefined`
+* `Zeros`
 * `|`
 * `Γ`
 * `Σ`
@@ -2995,7 +3112,6 @@ implemented by the time the project reaches version 1.0.
 * `AXM`
 * `AXQ`
 * `BASIS`
-* `BINS`
 * `BOX`
 * `C2P`
 * `CASCFG`
@@ -3010,7 +3126,6 @@ implemented by the time the project reaches version 1.0.
 * `COLCT`
 * `COND`
 * `CONIC`
-* `CORR`
 * `CURL`
 * `CYCLOTOMIC`
 * `CYLIN`
@@ -3020,7 +3135,6 @@ implemented by the time the project reaches version 1.0.
 * `DEFINE`
 * `DEGREE`
 * `DELALARM`
-* `DEPND`
 * `DERIV`
 * `DERVX`
 * `DESOLVE`
@@ -3043,7 +3157,6 @@ implemented by the time the project reaches version 1.0.
 * `EGCD`
 * `EGV`
 * `EGVL`
-* `ENDSUB`
 * `EPSX0`
 * `EQW`
 * `EQ→`
@@ -3075,7 +3188,6 @@ implemented by the time the project reaches version 1.0.
 * `FXND`
 * `GAUSS`
 * `GBASIS`
-* `GCD`
 * `GCDMOD`
 * `GRAD`
 * `GRAMSCHMIDT`
@@ -3090,8 +3202,6 @@ implemented by the time the project reaches version 1.0.
 * `HERMITE`
 * `HESS`
 * `HILBERT`
-* `HISTOGRAM`
-* `HISTPLOT`
 * `HORNER`
 * `IABCUV`
 * `IBASIS`
@@ -3102,7 +3212,6 @@ implemented by the time the project reaches version 1.0.
 * `IFFT`
 * `ILAP`
 * `IMAGE`
-* `INDEP`
 * `INFORM`
 * `INT`
 * `INTEGER`
@@ -3115,13 +3224,11 @@ implemented by the time the project reaches version 1.0.
 * `JORDAN`
 * `KER`
 * `KEY`
-* `KEYEVAL`
 * `LABEL`
 * `LAGRANGE`
 * `LAP`
 * `LAPL`
 * `LAST`
-* `LCM`
 * `LCXM`
 * `LDEC`
 * `LEGENDRE`
@@ -3135,7 +3242,6 @@ implemented by the time the project reaches version 1.0.
 * `LOCAL`
 * `LQ`
 * `LSQ`
-* `LU`
 * `LVAR`
 * `MAD`
 * `MAIN`
@@ -3154,19 +3260,15 @@ implemented by the time the project reaches version 1.0.
 * `MODULAR`
 * `MOLWT`
 * `MSGBOX`
-* `MSLV`
-* `MSOLVR`
 * `MULTMOD`
 * `MUSER`
 * `NDIST`
 * `NOVAL`
 * `NUMX`
 * `NUMY`
-* `ORDER`
 * `P2C`
 * `PA2B2`
 * `PARSURFACE`
-* `PARTFRAC`
 * `PCAR`
 * `PCONTOUR`
 * `PDIM`
@@ -3186,7 +3288,6 @@ implemented by the time the project reaches version 1.0.
 * `PREVAL`
 * `PROMPTSTO`
 * `PROPFRAC`
-* `PSDEV`
 * `PSI`
 * `Psi`
 * `PTAYL`
@@ -3198,60 +3299,41 @@ implemented by the time the project reaches version 1.0.
 * `QR`
 * `QUAD`
 * `QUOT`
-* `QUOTE`
 * `QXA`
 * `RANK`
 * `RATIO`
 * `RCI`
 * `RCIJ`
 * `RCLALARM`
-* `RCLF`
 * `RDM`
-* `REF`
 * `REMAINDER`
 * `RENAME`
 * `REORDER`
 * `REPL`
-* `RES`
 * `RESULTANT`
 * `RKF`
 * `RKFERR`
 * `RKFSTEP`
-* `RNRM`
-* `ROW–`
-* `ROW+`
-* `ROW→`
-* `→ROW`
-* `rref`
-* `RREF`
-* `RREFMOD`
 * `RRK`
 * `RRKSTEP`
 * `RSBERR`
 * `RSD`
-* `RSWP`
 * `RULES`
-* `R→I`
 * `SCATRPLOT`
-* `SCATTER`
 * `SCHUR`
 * `SCLΣ`
 * `SCONJ`
 * `SCROLL`
-* `SDEV`
 * `SEQ`
 * `SERIES`
 * `SEVAL`
-* `SHOW`
 * `SIDENS`
 * `SIGMA`
 * `SIGMAVX`
 * `SIGNTAB`
 * `SIMP2`
-* `SIMPLIFY`
 * `SINCOS`
 * `SINV`
-* `SIZE`
 * `SLOPEFIELD`
 * `SNEG`
 * `SNRM`
@@ -3263,11 +3345,8 @@ implemented by the time the project reaches version 1.0.
 * `SRAD`
 * `SREPL`
 * `STOALARM`
-* `STOF`
-* `STREAM`
 * `STURM`
 * `STURMAB`
-* `SUB`
 * `SUBTMOD`
 * `SVD`
 * `SVL`
@@ -3290,23 +3369,16 @@ implemented by the time the project reaches version 1.0.
 * `TLIN`
 * `TLINE`
 * `TRACE`
-* `TRAN`
 * `TRIG`
 * `TRIGCOS`
 * `TRIGO`
 * `TRIGTAN`
-* `TRN`
-* `TRUNC`
-* `TRUTH`
+* `TRUNC` (series truncation; planned under `TRNC`)
 * `TSIMP`
 * `TSTR`
 * `UNASSIGN`
 * `UNASSUME`
 * `UNBIND`
-* `UTPC`
-* `UTPF`
-* `UTPN`
-* `UTPT`
 * `VANDERMONDE`
 * `VER`
 * `VISIT`
@@ -3316,7 +3388,6 @@ implemented by the time the project reaches version 1.0.
 * `*W`
 * `WIREFRAME`
 * `XNUM`
-* `XQ`
 * `XVOL`
 * `XXRNG`
 * `YSLICE`
@@ -3381,7 +3452,6 @@ As a result, they behave like normal names on DB48X.
 * `SYSEVAL`
 * `TRANSIO`
 * `UFL1→MINIF`
-* `WSLOG`
 * `XGET`
 * `XMIT`
 * `XPUT`

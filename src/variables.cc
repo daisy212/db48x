@@ -345,12 +345,15 @@ object_p directory::store(object_g name, object_g value)
         if (!rt.clone_global(evalue, es))
             return nullptr;     // Out of memory, bail out
 
-        // Clone input value if it is within object being replaced
-        if (+value >= +evalue && +value < +evalue + es)
+        // Clone input value if it overlaps the object being replaced,
+        // e.g. if it is within it, or if we store an enclosing directory
+        if (+value < +evalue + es && +value + vs > +evalue)
         {
             value = rt.clone(value);
             if (!value)
                 return nullptr;
+            if (vs > es && rt.available(vs - es) < vs - es)
+                return nullptr;         // Out of memory
         }
 
         // Move memory above storage if necessary
@@ -373,10 +376,25 @@ object_p directory::store(object_g name, object_g value)
         if (rt.available(requested) < requested)
             return nullptr;               // Out of memory
 
-        // Move memory from directory up
+        // Find where to insert in the directory
         object_p start = object_p(+body);
         if (Settings.StoreAtEnd())
             start += dirsize;
+
+        // If the value straddles the insertion point, e.g. when storing
+        // the current directory or one of its parents, clone it first,
+        // since moving memory would otherwise insert a gap in the value.
+        // Cloning only moves temporaries, so it does not move `start`.
+        if (+value < start && +value + vs > start)
+        {
+            value = rt.clone(value);
+            if (!value)
+                return nullptr;
+            if (rt.available(requested) < requested)
+                return nullptr;           // Out of memory
+        }
+
+        // Move memory from directory up
         rt.move_globals(start + requested, start);
 
         // Copy name and value at end of directory
@@ -756,9 +774,12 @@ size_t directory::purge(object_p name, bool allowdir)
     case ID_list:
     case ID_array:
     {
+        // Purging an item can shrink the size header of an enclosing
+        // directory, which moves this one: do not keep using `this`
+        directory_g self = this;
         size_t size = 0;
         for (object_p obj : *list_p(name))
-            size += purge(obj, allowdir);
+            size += ((directory *) +self)->purge(obj, allowdir);
         return size;
     }
 
@@ -1091,20 +1112,41 @@ COMMAND_BODY(Copy)
 }
 
 
+static bool is_variable_name(object_p obj)
+// ----------------------------------------------------------------------------
+//   Check if an object is a (possibly quoted) variable name
+// ----------------------------------------------------------------------------
+{
+    if (object_p quoted = obj->as_quoted(object::ID_object))
+        obj = quoted;
+    object::id ty = obj->type();
+    return ty == object::ID_symbol || ty == object::ID_local;
+}
+
+
 static object::result store_op(object::id op)
 // ----------------------------------------------------------------------------
 //   Store with a given operation
 // ----------------------------------------------------------------------------
+//   Like legacy RPL, accept both `value 'name' STO-`, which stores
+//   `value - name`, and `'name' value STO-`, which stores `name - value`
 {
     object_g name = rt.stack(0);
     object_g value = rt.stack(1);
     if (!name || !value)
         return object::ERROR;
+    bool name_first = !is_variable_name(name) && is_variable_name(value);
+    if (name_first)
+    {
+        object_g tmp = name;
+        name = value;
+        value = tmp;
+    }
     object_g existing = directory::recall_all(name, true);
     if (!existing)
         return object::ERROR;
-    rt.stack(1, existing);
-    rt.stack(0, value);
+    rt.stack(name_first ? 1 : 0, existing);
+    rt.stack(name_first ? 0 : 1, value);
     object_p cmd = object::static_object(op);
     if (object::result res = cmd->evaluate())
         return res;
@@ -1278,12 +1320,12 @@ COMMAND_BODY(GarbageCollectorStatistics)
     if (cycles && purged && duration && lpurged && lduration && cleared)
     {
         scribble scr;
-        if (rt.append(cycles)    &&
-            rt.append(purged)    &&
-            rt.append(duration)  &&
-            rt.append(lpurged)   &&
-            rt.append(lduration) &&
-            rt.append(cleared))
+        if (scr.append(cycles)    &&
+            scr.append(purged)    &&
+            scr.append(duration)  &&
+            scr.append(lpurged)   &&
+            scr.append(lduration) &&
+            scr.append(cleared))
         {
             size_t sz = scr.growth();
             gcbytes data = scr.scratch();
@@ -1341,7 +1383,7 @@ COMMAND_BODY(Home)
 //   Return the home directory
 // ----------------------------------------------------------------------------
 {
-    rt.updir(~0U);
+    rt.updir(SIZE_MAX);
     ui.menu_refresh(ID_VariablesMenu, true);
     return OK;
 }
@@ -1360,13 +1402,24 @@ COMMAND_BODY(CurrentDirectory)
 }
 
 
+struct path_callback_data
+// ----------------------------------------------------------------------------
+//   Data passed to path_callback below
+// ----------------------------------------------------------------------------
+{
+    scribble   &scr;
+    directory_p dir;
+};
+
+
 static bool path_callback(object_p name, object_p obj, void *arg)
 // ----------------------------------------------------------------------------
 //   Find the directory in enclosing directory
 // ----------------------------------------------------------------------------
 {
-    if (obj == object_p(arg))
-        if (rt.append(name))
+    path_callback_data *data = (path_callback_data *) arg;
+    if (obj == object_p(data->dir))
+        if (data->scr.append(name))
             return true;
     return false;
 }
@@ -1380,7 +1433,7 @@ list_p directory::path(id type)
     scribble scr;
 
     size_t sz = leb128size(ID_Home);
-    byte *p = rt.allocate(sz);
+    byte *p = scr.allocate(sz);
     leb128(p, ID_Home);
 
     uint depth = rt.directories();
@@ -1389,7 +1442,8 @@ list_p directory::path(id type)
     {
         depth--;
         directory_p next = rt.variables(depth-1);
-        if (dir->enumerate(path_callback, (void *) next) != 1)
+        path_callback_data data = { scr, next };
+        if (dir->enumerate(path_callback, &data) != 1)
         {
             rt.directory_path_error();
             return nullptr;
@@ -1414,14 +1468,49 @@ COMMAND_BODY(Path)
 }
 
 
-static bool do_crdir(directory *dir, object_p name)
+static bool check_crdir(directory_r dir, object_p name)
 // ----------------------------------------------------------------------------
-//   Internal helper for CRDIR
+//   Check that we can create directories with the given name(s)
 // ----------------------------------------------------------------------------
+//   This makes sure that we do not create some directories in a list
+//   and then fail because a later name is invalid or already exists
 {
     if (object_p quoted = name->as_quoted(object::ID_object))
         name = quoted;
     if (list_p lst = name->as<list>())
+    {
+        for (object_p sub : *lst)
+            if (!check_crdir(dir, sub))
+                return false;
+        return true;
+    }
+
+    object::id ty = name->type();
+    if (ty != object::ID_symbol &&
+        !(ty == object::ID_integer && Settings.NumberedVariables()))
+    {
+        rt.invalid_name_error();
+        return false;
+    }
+    if (dir->recall(name))
+    {
+        rt.name_exists_error();
+        return false;
+    }
+    return true;
+}
+
+
+static bool do_crdir(directory_r dir, object_g name)
+// ----------------------------------------------------------------------------
+//   Internal helper for CRDIR
+// ----------------------------------------------------------------------------
+//   Creating a directory allocates memory and moves the globals, so `name`
+//   and the list iterator must be GC-safe across iterations
+{
+    if (object_p quoted = name->as_quoted(object::ID_object))
+        name = quoted;
+    if (list_g lst = name->as<list>())
     {
         for (object_p sub : *lst)
             if (!do_crdir(dir, sub))
@@ -1435,8 +1524,8 @@ static bool do_crdir(directory *dir, object_p name)
         return false;
     }
 
-    object_p newdir = rt.make<directory>();
-    return dir->store(name, newdir);
+    object_g newdir = rt.make<directory>();
+    return newdir && ((directory *) +dir)->store(name, newdir);
 }
 
 
@@ -1445,16 +1534,17 @@ COMMAND_BODY(CrDir)
 //   Create a directory
 // ----------------------------------------------------------------------------
 {
-    directory *dir = rt.variables(0);
+    directory_g dir = rt.variables(0);
     if (!dir)
     {
         rt.no_directory_error();
         return ERROR;
     }
 
-    if (object_p obj = rt.pop())
-        if (do_crdir(dir, obj))
-            return OK;
+    if (object_g obj = rt.top())
+        if (check_crdir(dir, obj) && do_crdir(dir, obj))
+            if (rt.drop())
+                return OK;
     return ERROR;
 }
 
@@ -1487,12 +1577,24 @@ COMMAND_BODY(Order)
 }
 
 
+struct vars_enumerator_data
+// ----------------------------------------------------------------------------
+//   Data passed to vars_enumerator below
+// ----------------------------------------------------------------------------
+{
+    object_p types;
+    scribble *scr;
+};
+
+
 static bool vars_enumerator(object_p name, object_p value, void *arg)
 // ----------------------------------------------------------------------------
 //   Callback to add the variable name to the scratchpad
 // ----------------------------------------------------------------------------
 {
-    object_p types = object_p(arg);
+    vars_enumerator_data *data = (vars_enumerator_data *) arg;
+    object_p types = data->types;
+    scribble &scr = *data->scr;
     if (types)
     {
         int tval = value->type_value();
@@ -1520,7 +1622,7 @@ static bool vars_enumerator(object_p name, object_p value, void *arg)
 
     object_g gname = name;
     size_t sz = name->size();
-    byte *p = rt.allocate(sz);
+    byte *p = scr.allocate(sz);
     if (!p)
         return false;
     memmove(p, byte_p(+gname), sz);
@@ -1540,7 +1642,8 @@ static list_p variables(object_p types)
         return nullptr;
     }
     scribble scr;
-    dir->enumerate(vars_enumerator, (void *) types);
+    vars_enumerator_data data = { types, &scr };
+    dir->enumerate(vars_enumerator, &data);
     list_p list = list::make (scr.scratch(), scr.growth());
     return list;
 }
@@ -1615,7 +1718,7 @@ static bool evaluate_variable(object_p name, object_p value, void *arg)
         disp = name->as_symbol(true);
     menu::info &mi = *((menu::info *) arg);
     if (value->type() == object::ID_directory)
-        mi.marker = L'◥';
+        mi.marker = U'◥';
     menu::items(mi, disp, menu::ID_variable_menu_execute);
 
     return true;
@@ -1681,8 +1784,8 @@ void VariablesMenu::list_variables(info &mi)
 
     for (uint k = 0; k < ui.NUM_SOFTKEYS - (mi.pages > 1); k++)
     {
-        ui.marker(k + 1 * ui.NUM_SOFTKEYS, L'▶', false);
-        ui.marker(k + 2 * ui.NUM_SOFTKEYS, L'▶', true);
+        ui.marker(k + 1 * ui.NUM_SOFTKEYS, U'▶', false);
+        ui.marker(k + 2 * ui.NUM_SOFTKEYS, U'▶', true);
     }
 }
 

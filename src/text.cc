@@ -129,13 +129,15 @@ text_g operator+(text_r x, text_r y)
         return x;
     object::id type = x->type();
     size_t sx = 0, sy = 0;
-    utf8 tx = x->value(&sx);
-    utf8 ty = y->value(&sy);
+    // Allocating the result may run the garbage collector and move x and y:
+    // keep pointers to their contents that the collector updates
+    gcutf8 tx = x->value(&sx);
+    gcutf8 ty = y->value(&sy);
     text_g concat = rt.make<text>(type, tx, sx + sy);
     if (concat)
     {
         utf8 tc = concat->value();
-        memcpy((byte *) tc + sx, (byte *) ty, sy);
+        memcpy((byte *) tc + sx, (byte *) (utf8) ty, sy);
     }
     return concat;
 }
@@ -175,6 +177,24 @@ size_t text::utf8_characters() const
     for (utf8 s = start; s < end; s = utf8_next(s))
         count++;
     return count;
+}
+
+
+cstring text::null_terminated_value() const
+// ----------------------------------------------------------------------------
+//   Return a null-terminated string for standard C functions (don't abuse it)
+// ----------------------------------------------------------------------------
+{
+    size_t sz;
+    utf8   txt = value(&sz);
+    if (!txt[sz - 1])
+        return cstring(txt);
+
+    char zero = 0;
+    text_p padded = text_g(this) + text_g(text::make(&zero, 1));
+    if (!padded)
+        return "";
+    return cstring(padded->value(nullptr));
 }
 
 

@@ -161,6 +161,8 @@ symbol_p expression::render(uint depth, int &precedence, bool editing)
     if (object_g obj = rt.pop())
     {
         uint arity = obj->arity();
+        if (obj->variable_arity())
+            arity = 0;          // Let 'funcall' deal with extra args
         if (rt.depth() < depth + arity)
         {
             if (rt.depth() != depth)
@@ -688,7 +690,7 @@ static object_p grab_arguments(size_t &eq, size_t &eqsz)
             object_p obj = rt.stack(eq + len);
             if (sym->found_in(obj))
                 expression::contains_independent_variable = true;
-            if (!rt.append(obj))
+            if (!scr.append(obj))
                 return nullptr;
         }
     }
@@ -697,7 +699,7 @@ static object_p grab_arguments(size_t &eq, size_t &eqsz)
         while (len--)
         {
             object_p obj = rt.stack(eq + len);
-            if (!rt.append(obj))
+            if (!scr.append(obj))
                 return nullptr;
         }
     }
@@ -1049,6 +1051,8 @@ static size_t check_match(size_t eq, size_t eqsz,
             settings::SaveNumericalResults snr(true);
             settings::SaveNumericalConstants snc(true);
             settings::SaveAutoSimplify sas(true);
+            settings::SaveAutomaticConstants sac(false); // Names stay names
+            settings::SaveAutomaticXLibs     sax(false);
             size_t depth = rt.depth();
             if (program::run(+ftop) != object::OK)
                 return 0;
@@ -1132,7 +1136,7 @@ static algebraic_p build_expr(expression_p eqin,
         {
             // Copy from source equation directly
             object_p obj = *it;
-            if (!rt.append(obj))
+            if (!scr.append(obj))
                 return nullptr;
         }
         else if (!replaced)
@@ -1230,7 +1234,7 @@ static algebraic_p build_expr(expression_p eqin,
                     nvars++;
                     nconstants++;
                 }
-                if (!rt.append(tobjsize, byte_p(tobj)))
+                if (!scr.append(tobjsize, byte_p(tobj)))
                     return nullptr;
             }
 
@@ -1246,7 +1250,7 @@ static algebraic_p build_expr(expression_p eqin,
                 if (!value)
                     return nullptr;
                 rt.free(len);
-                if (!rt.append(value))
+                if (!scr.append(value))
                     return nullptr;
             }
 
@@ -1301,6 +1305,8 @@ expression_p expression::rewrite(expression_r from,
 //   to is `B + A`, then the output will be `sin(Y + X) + 3`.
 //
 {
+    cleaner purge;
+
     // Do not keep going if we got an error along the way (e.g. out of memory)
     if (!from || !to || rt.error())
         return nullptr;
@@ -1355,23 +1361,44 @@ expression_p expression::rewrite(expression_r from,
                                       cond, locals);
                 if (matchsz || interrupted())
                     break;
+
+                // Drop locals left behind by a failed partial match
+                rt.unlocals(rt.locals() - locals);
             }
         }
         else
         {
+            // Check if there is a match in sub-equations going up, i.e.
+            // find the smallest match, picking the first one in case of tie.
+            // A match starting at a given position has a size that does not
+            // depend on the window, so try each position only once.
             size_t eqstart = eqst;
-            // Check if there is a match in sub-equations going up
-            for (eqsz = fromsz; eqsz <= eqlen; eqsz++)
+            size_t beststart = 0;
+            size_t bestsize = 0;
+            for (eqst = eqstart; eqst + fromsz <= eqlen; eqst++)
             {
-                for (eqst = eqstart; eqst + eqsz <= eqlen; eqst++)
+                size_t sz = check_match(eqst, eqlen - eqst, fromst, fromsz,
+                                        cond, locals);
+                rt.unlocals(rt.locals() - locals);
+                if (interrupted())
+                    break;
+                if (sz && (!bestsize || sz < bestsize))
                 {
-                    matchsz = check_match(eqst, eqsz, fromst, fromsz,
-                                          cond, locals);
-                    if (matchsz || interrupted())
+                    beststart = eqst;
+                    bestsize = sz;
+                    if (sz == fromsz)
                         break;
                 }
-                if (matchsz || interrupted())
-                    break;
+            }
+
+            // Redo the best match to get the locals for that match
+            matchsz = 0;
+            if (bestsize && !interrupted())
+            {
+                eqst = beststart;
+                eqsz = bestsize;
+                matchsz = check_match(eqst, eqsz, fromst, fromsz,
+                                      cond, locals);
             }
         }
         if (interrupted())
@@ -1422,6 +1449,10 @@ err:
         record(rewrites_done,
                "%t rewritten as %t applying %t->%t with condition %t %u times",
                +saved, +eq, +from, +to, +cond, rwcount);
+
+    // Purge intermediate temporaries created during rewrite
+    if (eq && +eq != this)
+        eq = purge(eq);
     return eq;
 }
 
@@ -2223,6 +2254,8 @@ grob_p expression::graph(grapher &g, uint depth, int &precedence)
     if (object_g obj = rt.pop())
     {
         uint arity = obj->arity();
+        if (obj->variable_arity())
+            arity = 0;          // Let 'funcall' deal with extra args
         if (rt.depth() < depth + arity)
         {
             if (rt.depth() != depth)
@@ -2493,6 +2526,7 @@ GRAPH_BODY(expression)
     if (!expr->expand_without_size())
         return nullptr;
 
+    save<bool> su(symbol::unambiguous, true);
     int    prec   = 0;
     grob_g result = graph(g, depth, prec);
     bool   more   = rt.depth() > depth;
@@ -2837,7 +2871,8 @@ PARSE_BODY(funcall)
     id nty = p.out->type();
     if (nty != ID_symbol && nty != ID_local &&
         nty != ID_expression && nty != ID_funcall &&
-        nty != ID_list && nty != ID_array && nty != ID_xlib)
+        nty != ID_list && nty != ID_array && nty != ID_xlib &&
+        !variable_arity(nty))
         return SKIP;
 
     // Cannot parse functions while parsing a unit
@@ -2875,7 +2910,7 @@ PARSE_BODY(funcall)
             return ERROR;
         parsed += child.length;
 
-        if (!rt.append_expression(obj))
+        if (!scr.append_expression(obj))
             return ERROR;
 
         source = p.source;      // In case of GC
@@ -2895,7 +2930,7 @@ PARSE_BODY(funcall)
     }
 
     // Copy the name last
-    if (!rt.append(callee))
+    if (!scr.append(callee))
         return ERROR;
 
     // Create the function call object
@@ -2918,7 +2953,14 @@ EVAL_BODY(funcall)
         if (object_g callee = fcall->head())
         {
             if (symbol_p sym = callee->as<symbol>())
+            {
                 callee = directory::recall_all(sym, false);
+                if (!callee)
+                {
+                    // Undefined function: keep 'G(2)' symbolic like HP does
+                    return rt.push(o) ? OK : ERROR;
+                }
+            }
             else if (local_p loc = callee->as<local>())
                 callee = loc->recall();
             if (callee)
@@ -2949,7 +2991,13 @@ EVAL_BODY(funcall)
         }
     }
 
-    return o->run(true);
+    if (rt.depth() > Settings.MaxStackDepth())
+    {
+        rt.stack_depth_error();
+        return ERROR;
+    }
+
+    return o->run(false);
 }
 
 
@@ -2965,7 +3013,7 @@ array_p funcall::args() const
         return nullptr;
     scribble scr;
     while (object_p obj = arg(sdr.depth))
-        if (!rt.append(obj))
+        if (!scr.append(obj))
             return nullptr;
     if (rt.depth() > sdr.depth)
         return nullptr;
@@ -3026,7 +3074,9 @@ COMMAND_BODY(Apply)
                 }
                 else if (callee->is_algebraic_fn())
                 {
-                    if (arity != callee->arity())
+                    uint carity = callee->arity();
+                    bool varity = callee->variable_arity();
+                    if (arity != carity || (varity && arity > carity))
                     {
                         rt.argument_count_error();
                         return ERROR;
@@ -3041,9 +3091,9 @@ COMMAND_BODY(Apply)
                 scribble scr;
                 size_t argsize = 0;
                 object_p argsrc = lst->objects(&argsize);
-                if (rt.append(argsrc, argsize))
+                if (scr.append(argsrc, argsize))
                 {
-                    if (rt.append(callee))
+                    if (scr.append(callee))
                     {
                         gcbytes scratch = scr.scratch();
                         size_t  alloc   = scr.growth();
@@ -3318,12 +3368,451 @@ expression_p expression::as_difference_for_solve() const
 }
 
 
-expression_p expression::expand() const
+// ============================================================================
+//
+//   Collecting like terms using the polynomial machinery
+//
+// ============================================================================
+//
+//   An expression is converted to a polynomial where sub-expressions that are
+//   not polynomial (function calls, division by non-constants, non-integer
+//   powers...) are replaced with placeholder variables called "atoms".
+//   The polynomial merges like terms, and is then converted back to an
+//   expression with terms in decreasing lexicographic order of exponents.
+
+static const size_t MAX_ATOMS = 32;    // Maximum number of atoms
+static const ularge MAX_TERMS = 512;   // Maximum number of terms
+static const size_t MIN_BUDGET = 8192; // Minimum budget for polynomial sizes
+
+struct like_terms
 // ----------------------------------------------------------------------------
-//   Run various rewrites to expand terms
+//   State while collecting like terms
 // ----------------------------------------------------------------------------
 {
-    return rewrites<DOWN>(
+    like_terms(size_t budget): budget(budget), natoms(0), atoms() {}
+
+    polynomial_p to_polynomial(expression_r eq);
+    algebraic_p  to_expression(polynomial_r poly);
+    polynomial_p atom(algebraic_r value);
+    bool         make_atom(object::id op, uint arity, size_t depth);
+
+    static bool  is_constant(polynomial_r poly, algebraic_g &value);
+    static uint  terms(polynomial_r poly);
+    static int   compare_terms(polynomial_r poly, size_t xo, size_t yo);
+    static ularge power_terms(ularge terms, ularge exp);
+
+    size_t      budget;
+    size_t      natoms;
+    algebraic_g atoms[MAX_ATOMS];
+};
+
+
+polynomial_p like_terms::atom(algebraic_r value)
+// ----------------------------------------------------------------------------
+//   Return a polynomial for a placeholder variable representing the value
+// ----------------------------------------------------------------------------
+//   Placeholder names start with 0xFF, which never occurs in UTF-8 text.
+//   This makes sure they never collide with user names and sort last.
+{
+    if (!value)
+        return nullptr;
+    size_t idx = 0;
+    while (idx < natoms && !atoms[idx]->is_same_as(+value))
+        idx++;
+    if (idx >= MAX_ATOMS)
+        return nullptr;
+    if (idx == natoms)
+        atoms[natoms++] = value;
+    char     name[2] = { char(0xFF), char(0x80 + idx) };
+    symbol_g sym     = rt.make<symbol>(object::ID_symbol, utf8(name), 2);
+    return polynomial::make(+sym);
+}
+
+
+bool like_terms::is_constant(polynomial_r poly, algebraic_g &value)
+// ----------------------------------------------------------------------------
+//   Check if a polynomial is a constant, and if so return the value
+// ----------------------------------------------------------------------------
+{
+    size_t nvars = poly->variables();
+    uint   count = 0;
+    value = nullptr;
+    for (auto term : *poly)
+    {
+        if (count++)
+            return false;
+        value = term.factor();
+        for (size_t v = 0; v < nvars; v++)
+            if (term.exponent())
+                return false;
+    }
+    if (!count)
+        value = integer::make(0);
+    return value;
+}
+
+
+uint like_terms::terms(polynomial_r poly)
+// ----------------------------------------------------------------------------
+//   Count the terms in a polynomial
+// ----------------------------------------------------------------------------
+{
+    uint count = 0;
+    for (auto term : *poly)
+        count++;
+    return count;
+}
+
+
+ularge like_terms::power_terms(ularge terms, ularge exp)
+// ----------------------------------------------------------------------------
+//   Upper bound for the number of terms in a polynomial power, capped
+// ----------------------------------------------------------------------------
+//   This is the binomial coefficient C(exp+terms-1, terms-1)
+{
+    ularge result = 1;
+    for (ularge k = 1; k < terms && result <= MAX_TERMS; k++)
+        result = result * (exp + k) / k;
+    return result;
+}
+
+
+bool like_terms::make_atom(object::id op, uint arity, size_t depth)
+// ----------------------------------------------------------------------------
+//   Replace the polynomial arguments on the stack with an atom
+// ----------------------------------------------------------------------------
+{
+    if (arity > 4 || rt.depth() < depth + arity)
+        return false;
+    algebraic_g args[4];        // Last argument first, see expression()
+    for (uint a = 0; a < arity; a++)
+    {
+        polynomial_g arg = rt.stack(a)->as<polynomial>();
+        if (!arg)
+            return false;
+        args[a] = to_expression(arg);
+        if (!args[a])
+            return false;
+    }
+    algebraic_g  value = expression::make(op, args, arity);
+    polynomial_g poly  = atom(value);
+    if (!poly)
+        return false;
+    rt.drop(arity);
+    return rt.push(+poly);
+}
+
+
+polynomial_p like_terms::to_polynomial(expression_r eq)
+// ----------------------------------------------------------------------------
+//   Convert an expression to a polynomial, using atoms for non-polynomials
+// ----------------------------------------------------------------------------
+{
+    size_t depth = rt.depth();
+    for (object_p obj : *eq)
+    {
+        object::id   ty   = obj->type();
+        polynomial_g poly = nullptr;
+        bool         ok   = true;
+        if (object::is_real(ty) ||
+            ty == object::ID_rectangular || ty == object::ID_polar)
+        {
+            algebraic_g value = algebraic_p(obj);
+            poly = polynomial::make(+value);
+            ok = poly && rt.push(+poly);
+        }
+        else if (ty == object::ID_symbol)
+        {
+            symbol_g sym = symbol_p(obj);
+            poly = polynomial::make(+sym);
+            ok = poly && rt.push(+poly);
+        }
+        else if (ty == object::ID_add || ty == object::ID_subtract ||
+                 ty == object::ID_multiply || ty == object::ID_divide ||
+                 ty == object::ID_pow)
+        {
+            ok = rt.depth() >= depth + 2;
+            polynomial_g x, y;
+            if (ok)
+            {
+                x = rt.stack(1)->as<polynomial>();
+                y = rt.stack(0)->as<polynomial>();
+                ok = x && y;
+            }
+            if (ok)
+            {
+                algebraic_g cst;
+                switch (ty)
+                {
+                case object::ID_add:
+                    poly = polynomial::add(x, y);
+                    break;
+                case object::ID_subtract:
+                    poly = polynomial::sub(x, y);
+                    break;
+                case object::ID_multiply:
+                    if (terms(x) * terms(y) <= MAX_TERMS)
+                        poly = polynomial::mul(x, y);
+                    else
+                        ok = false;
+                    break;
+                case object::ID_divide:
+                    // Division by a non-zero constant, multiply by inverse
+                    if (is_constant(y, cst) && !cst->is_zero(false))
+                    {
+                        algebraic_g one = integer::make(1);
+                        cst = one / cst;
+                        polynomial_g inv = polynomial::make(+cst);
+                        if (inv)
+                            poly = polynomial::mul(x, inv);
+                    }
+                    break;
+                case object::ID_pow:
+                    // Power by a small positive integer
+                    if (is_constant(y, cst) && cst->type() == object::ID_integer)
+                    {
+                        ularge exp = integer_p(+cst)->value<ularge>();
+                        if (exp <= MAX_TERMS &&
+                            power_terms(terms(x), exp) <= MAX_TERMS)
+                            poly = polynomial::pow(x, exp);
+                    }
+                    break;
+                default:
+                    break;
+                }
+                if (!ok || rt.error())
+                    ok = false;
+                else if (poly)
+                    ok = rt.drop(2) && rt.push(+poly);
+                else
+                    ok = make_atom(ty, 2, depth);
+            }
+        }
+        else if (ty == object::ID_neg)
+        {
+            polynomial_g x;
+            if (rt.depth() > depth)
+                x = rt.top()->as<polynomial>();
+            poly = x ? polynomial::neg(x) : nullptr;
+            ok = poly && rt.top(+poly);
+        }
+        else if (ty == object::ID_sq || ty == object::ID_cubed)
+        {
+            polynomial_g x;
+            if (rt.depth() > depth)
+                x = rt.top()->as<polynomial>();
+            poly = x ? polynomial::pow(x, ty == object::ID_sq ? 2 : 3) : nullptr;
+            ok = poly && rt.top(+poly);
+        }
+        else if (uint arity = obj->arity())
+        {
+            ok = (object::is_algebraic_fn(ty) || object::is_algebraic(ty)) &&
+                make_atom(ty, arity, depth);
+        }
+        else if (obj->is_algebraic() && !object::is_unit(ty))
+        {
+            algebraic_g value = algebraic_p(obj);
+            poly = atom(value);
+            ok = poly && rt.push(+poly);
+        }
+        else
+        {
+            ok = false;
+        }
+
+        // Give up if polynomials get too large, e.g. many variables
+        if (ok && rt.top()->size() > budget)
+        {
+            record(expression, "Polynomial size %u exceeds budget %u",
+                   rt.top()->size(), budget);
+            ok = false;
+        }
+        if (!ok)
+        {
+            rt.drop(rt.depth() - depth);
+            return nullptr;
+        }
+    }
+
+    polynomial_p result = nullptr;
+    if (rt.depth() == depth + 1)
+        result = rt.top()->as<polynomial>();
+    rt.drop(rt.depth() - depth);
+    return result;
+}
+
+
+int like_terms::compare_terms(polynomial_r poly, size_t xo, size_t yo)
+// ----------------------------------------------------------------------------
+//   Compare terms at the given offsets, higher exponents first
+// ----------------------------------------------------------------------------
+{
+    size_t nvars = poly->variables();
+    byte_p base  = byte_p(+poly);
+    byte_p xp    = byte_p(object_p(base + xo)->skip());
+    byte_p yp    = byte_p(object_p(base + yo)->skip());
+    for (size_t v = 0; v < nvars; v++)
+    {
+        ularge xe = leb128<ularge>(xp);
+        ularge ye = leb128<ularge>(yp);
+        if (xe != ye)
+            return xe > ye ? -1 : 1;
+    }
+    return xo < yo ? -1 : xo > yo ? 1 : 0;
+}
+
+
+algebraic_p like_terms::to_expression(polynomial_r poly)
+// ----------------------------------------------------------------------------
+//   Convert a polynomial back to an expression, replacing atoms
+// ----------------------------------------------------------------------------
+{
+    size_t      nvars = poly->variables();
+    algebraic_g vars[nvars];
+    for (size_t v = 0; v < nvars; v++)
+    {
+        size_t len  = 0;
+        utf8   name = poly->variable(v, &len);
+        if (len == 2 && name[0] == 0xFF && size_t(name[1] - 0x80) < natoms)
+            vars[v] = atoms[name[1] - 0x80];
+        else
+            vars[v] = poly->variable(v);
+        if (!vars[v])
+            return nullptr;
+    }
+
+    // Emit terms by decreasing exponents (selection, no allocation needed)
+    algebraic_g result = nullptr;
+    size_t      prev   = 0;
+    bool        first  = true;
+    bool        after  = false;
+    while (true)
+    {
+        size_t best = 0;
+        for (polynomial::iterator it = poly->begin(); it != poly->end(); ++it)
+        {
+            size_t offset = it.offset;
+            if (after && compare_terms(poly, offset, prev) <= 0)
+                continue;
+            if (!best || compare_terms(poly, offset, best) < 0)
+                best = offset;
+        }
+        if (!best)
+            break;
+        prev  = best;
+        after = true;
+
+        // Build the term
+        polynomial::iterator term = poly->begin();
+        term.offset = best;
+        algebraic_g factor = term.factor();
+        if (factor->is_zero(false))
+            continue;
+        bool hasvar = false;
+        polynomial::iterator scan = term;
+        for (size_t v = 0; v < nvars; v++)
+            if (scan.exponent())
+                hasvar = true;
+
+        // Subtract negative terms, use `-X` for a leading `-1·X`
+        bool negative = factor->is_negative(false);
+        bool subtract = negative && !first;
+        bool minus    = false;
+        if (subtract)
+        {
+            factor = -factor;
+        }
+        else if (negative && hasvar)
+        {
+            algebraic_g opposite = -factor;
+            if (opposite && opposite->is_one(false))
+            {
+                minus  = true;
+                factor = opposite;
+            }
+        }
+        if (!factor)
+            return nullptr;
+
+        algebraic_g value = hasvar && factor->is_one(false) ? nullptr : +factor;
+        for (size_t v = 0; v < nvars; v++)
+        {
+            ularge exp = term.exponent();
+            if (!exp)
+                continue;
+            algebraic_g f = vars[v];
+            if (exp == 2)
+            {
+                f = expression::make(object::ID_sq, f);
+            }
+            else if (exp == 3)
+            {
+                f = expression::make(object::ID_cubed, f);
+            }
+            else if (exp > 1)
+            {
+                algebraic_g e = integer::make(exp);
+                f = expression::make(object::ID_pow, f, e);
+            }
+            value = value ? expression::make(object::ID_multiply, value, f) : f;
+            if (!value)
+                return nullptr;
+        }
+        if (minus)
+            value = expression::make(object::ID_neg, value);
+        if (!value)
+            return nullptr;
+
+        if (first)
+            result = value;
+        else
+            result = expression::make(subtract ? object::ID_subtract
+                                               : object::ID_add,
+                                      result, value);
+        if (!result)
+            return nullptr;
+        first = false;
+    }
+
+    if (!result)
+        result = integer::make(0);
+    return result;
+}
+
+
+static expression_p collect_like_terms(expression_r eq, bool *atoms = nullptr)
+// ----------------------------------------------------------------------------
+//   Normalize an expression as a polynomial, nullptr if not possible
+// ----------------------------------------------------------------------------
+{
+    if (!eq || eq->type() != object::ID_expression)
+        return nullptr;
+    size_t       budget = 8 * eq->size();
+    like_terms   lt(budget < MIN_BUDGET ? MIN_BUDGET : budget);
+    polynomial_g poly = lt.to_polynomial(eq);
+    if (!poly)
+        return nullptr;
+    algebraic_g result = lt.to_expression(poly);
+    if (!result)
+        return nullptr;
+    if (atoms)
+        *atoms = lt.natoms;
+    record(expression, "Collected like terms in %t as %t", +eq, +result);
+    if (expression_p req = result->as<expression>())
+        return req;
+    return expression::make(result);
+}
+
+
+static expression_p expand_rules(expression_r eq)
+// ----------------------------------------------------------------------------
+//   Rewrites expanding the non-polynomial parts of an expression
+// ----------------------------------------------------------------------------
+//   Distributing products, merging like terms and integer powers are done by
+//   collect_like_terms, so there are no rules here to reorder terms or to
+//   expand X^K, which caused "Too many rewrites" errors for e.g. (X+1)^10.
+{
+    return eq->rewrites<expression::DOWN>(
         // Compute constants
         A+B,            A+B,
         A-B,            A-B,
@@ -3351,12 +3840,6 @@ expression_p expression::expand() const
         X^(Y+Z),        (X^Y)*(X^Z),
         X^(Y-Z),        (X^Y)/(X^Z),
         X^(Y*Z),        (X^Y)^Z,
-
-        // Group terms
-        v + u,          u + v,
-        X + v + u,      X + u + v,
-        v * u,          u * v,
-        X * v * u,      X * u * v,
 
         // Sign change simplifications
         X + (-Y),       X - Y,
@@ -3388,10 +3871,32 @@ expression_p expression::expand() const
 
         // Power simplifications
         X^k0,           k1,
-        X^k1,           X,
+        X^k1,           X);
+}
 
-        // Expansion of powers
-        X^K,            (X^(K-k1))*X);
+
+expression_p expression::expand() const
+// ----------------------------------------------------------------------------
+//   Expand terms, then collect like terms
+// ----------------------------------------------------------------------------
+{
+    expression_g eq    = this;
+    bool         atoms = false;
+    if (expression_g poly = collect_like_terms(eq, &atoms))
+    {
+        if (!atoms)
+            return poly;
+        eq = poly;
+    }
+    if (rt.error())
+        return nullptr;
+
+    eq = expand_rules(eq);
+    if (!eq)
+        return nullptr;
+    if (expression_p poly = collect_like_terms(eq))
+        return poly;
+    return rt.error() ? nullptr : +eq;
 }
 
 
@@ -3399,8 +3904,17 @@ expression_p expression::collect() const
 // ----------------------------------------------------------------------------
 //    Run various rewrites to collect terms (inverse of expand)
 // ----------------------------------------------------------------------------
+//    Like terms are first merged using collect_like_terms, unless that makes
+//    the expression larger, e.g. for `(X+1)^10`, which it would expand.
 {
-    return rewrites<UP>(
+    expression_g eq = this;
+    if (expression_g poly = collect_like_terms(eq))
+        if (poly->size() <= eq->size())
+            eq = poly;
+    if (rt.error())
+        return nullptr;
+
+    return eq->rewrites<UP>(
         // Collection of powers
         (X^K)*X,        X^(K+k1),
         X*(X^K),        X^(K+k1),
@@ -3420,6 +3934,10 @@ expression_p expression::collect() const
         A*X + B*X,      (A + B) * X,
         X + A * X,      (A + k1) * X,
         A * X + X,      (A + k1) * X,
+        Z - X * Z,      (k1 - X) * Z,
+        Z + X * Z,      (X + k1) * Z,
+        X * Z - Z,      (X - k1) * Z,
+        X * Z + Z,      (X + k1) * Z,
         k0 - X,         -X,
         X - k0,         X,
         X - X,          k0,
@@ -3437,12 +3955,6 @@ expression_p expression::collect() const
         X * (-Y),       -(X*Y),
         X - (-Y),       X + Y,
         X + (-Y),       X - Y,
-
-        // Group terms
-        X * v * u,      X * u * v,
-        v * u,          u * v,
-        X + v + u,      X + u + v,
-        v + u,          u + v,
 
         // Collect powers
         (X^Y)^Z,        X^(Y*Z),
@@ -3644,7 +4156,21 @@ expression_p expression::simplify() const
         ln(exp(X)),     X,
         exp(ln(X)),     X,
         log10(exp10(X)),X,
-        exp10(log10(X)),X
+        exp10(log10(X)),X,
+
+        // Trivial function values
+        exp(k0),        k1,
+        ln(k1),         k0,
+        sin(k0),        k0,
+        cos(k0),        k1,
+        tan(k0),        k0,
+        asin(k0),       k0,
+        asin(k1),       kpi/k2,
+        acos(k1),       k0,
+        acos(k0),       kpi/k2,
+        atan(k0),       k0,
+        sqrt(k0),       k0,
+        sqrt(k1),       k1
         );
 }
 
@@ -3723,10 +4249,19 @@ FUNCTION_BODY(ReorderTerms)
 
 FUNCTION_BODY(Simplify)
 // ----------------------------------------------------------------------------
-//   Simplify equations
+//   Simplify equations, collecting terms if that makes the result smaller
 // ----------------------------------------------------------------------------
 {
-    return do_rewrite(x, &expression::simplify);
+    algebraic_g result = do_rewrite(x, &expression::simplify);
+    if (expression_g eq = result ? result->as<expression>() : nullptr)
+    {
+        expression_g collected = eq->collect();
+        if (!collected)
+            return nullptr;
+        if (collected->size() < eq->size())
+            result = +collected;
+    }
+    return result;
 }
 
 
@@ -3873,7 +4408,8 @@ expression_p expression::isolate(symbol_r sym, bool error) const
             sq(N) == P,             N == sqrt(P),
             sqrt(N) == P,           N == sq(P),
             cubed(N) == P,          N == cbrt(P),
-            cbrt(N) == P,           N == cubed(P)
+            cbrt(N) == P,           N == cubed(P),
+            abs(N) == P,            N == P
             )
         : eq->rewrites(
             // Move the independent variable to the left
@@ -3896,7 +4432,7 @@ expression_p expression::isolate(symbol_r sym, bool error) const
             Q * N == P,             N == P / Q,
             N / Q == P,             N == P * Q,
             Q / N == P,             N == Q / P,
-            (N ^ Q) == P,           N == (P ^ inv(Q)) + exp(intk*kpi*ki/Q),
+            (N ^ Q) == P,           N == (P ^ inv(Q)) * exp(k2*intk*kpi*ki/Q),
             (Q ^ N) == P,           N == ln(P) / ln(Q),
 
             // Basic simplifications
@@ -3911,11 +4447,14 @@ expression_p expression::isolate(symbol_r sym, bool error) const
 
             // Reversible functions
             inv(N) == P,            N == inv(P),
-            sin(N) == P,            N == asin(P) + k2*intk*kpi,
-            cos(N) == P,            N == acos(P) + k2*intk*kpi,
+            // Each indexed constant may only appear once per rule, so the
+            // two families of sin and csc are written through acos/asec:
+            // sin(N)=P <=> cos(N-π/2)=P
+            sin(N) == P,            N == kpi/k2 + signk*acos(P) + k2*intk*kpi,
+            cos(N) == P,            N == signk*acos(P) + k2*intk*kpi,
             tan(N) == P,            N == atan(P) + intk*kpi,
-            sec(N) == P,            N == asec(P) + k2*intk*kpi,
-            csc(N) == P,            N == acsc(P) + k2*intk*kpi,
+            sec(N) == P,            N == signk*asec(P) + k2*intk*kpi,
+            csc(N) == P,            N == kpi/k2 + signk*asec(P) + k2*intk*kpi,
             cot(N) == P,            N == acot(P) + intk*kpi,
             sinh(N) == P,           N == asinh(P) + k2*intk*kpi*ki,
             cosh(N) == P,           N == acosh(P) + k2*intk*kpi*ki,
@@ -3947,8 +4486,9 @@ expression_p expression::isolate(symbol_r sym, bool error) const
 
             sq(N) == P,             N == signk*sqrt(P),
             sqrt(N) == P,           N == sq(P),
-            cubed(N) == P,          N == cbrt(P) + exp(intk*kpi*ki/k3),
-            cbrt(N) == P,           N == cubed(P)
+            cubed(N) == P,          N == cbrt(P) * exp(k2*intk*kpi*ki/k3),
+            cbrt(N) == P,           N == cubed(P),
+            abs(N) == P,            N == signk*P
             );
 
     if (+result == +eq)
@@ -4101,7 +4641,7 @@ static algebraic_p derivative_funcall_build(funcall_p src, funcall_p repl)
         {
             if (++a == nobj)
                 obj = +st;
-            if (!rt.append(obj))
+            if (!scr.append(obj))
                 return nullptr;
         }
         gcbytes bytes = scr.scratch();
@@ -4176,7 +4716,7 @@ expression_p expression::derivative(symbol_r sym) const
 
         sin(X)>>indep,          (X>>indep)*cos(X),
         cos(X)>>indep,          -(X>>indep)*sin(X),
-        tan(X)>>indep,          (X>>indep)/sq(cos(x)),
+        tan(X)>>indep,          (X>>indep)/sq(cos(X)),
         sec(X)>>indep,          (X>>indep)*sec(X)*tan(X),
         csc(X)>>indep,          -(X>>indep)*csc(X)*cot(X),
         cot(X)>>indep,          -(X>>indep)*sq(csc(X)),
@@ -4265,7 +4805,7 @@ PARSE_BODY(Derivative)
 
     // First character must be a constant marker
     unicode cp = utf8_codepoint(source);
-    if (cp != L'∂')
+    if (cp != U'∂')
         return SKIP;
     parsed = utf8_next(source, parsed, max);
 
@@ -4501,7 +5041,7 @@ PARSE_BODY(Primitive)
 
     // First character must be a constant marker
     unicode cp = utf8_codepoint(source);
-    if (cp != L'∫')
+    if (cp != U'∫')
         return SKIP;
     parsed = utf8_next(source, parsed, max);
 
@@ -4573,7 +5113,11 @@ list_p expression::zeros(object_p eqobj, symbol_r var)
     // Check if we can isolate the variable
     rt.clear_error();
     if (expression_g isol = expr->isolated(var))
+    {
+        if (Settings.AutoSimplify())
+            isol = isol->simplify();
         return purge(list::make(ID_list, isol));
+    }
 
     // Check if we are multiplying or dividing two expressions
     object_p op = expr->outermost_operator();

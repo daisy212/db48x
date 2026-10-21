@@ -45,6 +45,10 @@
 #include "variables.h"
 
 #include <stdio.h>
+#include <string.h>
+
+
+bool symbol::unambiguous = false;
 
 
 EVAL_BODY(symbol)
@@ -62,9 +66,29 @@ EVAL_BODY(symbol)
         }
         else if (object_p found = directory::recall_all(o, false))
         {
+            // Optimization: quick chase chains of names without eval loop
+            uint hops = 0;
+            while (symbol_p next = found->as_quoted<symbol>())
+            {
+                if (next == o || hops++ > Settings.MaxNameChainLength())
+                {
+                    rt.recursion_error();
+                    return ERROR;
+                }
+                if (object_p nfound = directory::recall_all(next, false))
+                {
+                    found = nfound;
+                    continue;
+                }
+
+                // We found a name that does not resolve: that's it
+                o = next;
+                goto notfound;
+            }
             return program::run_program(found);
         }
     }
+notfound:
     if (object_g eq = expression::make(o))
         if (rt.push(eq))
             return OK;
@@ -84,7 +108,7 @@ PARSE_BODY(symbol)
 
     // First character must be alphabetic
     unicode cp     = utf8_codepoint(source);
-    if (cp == L'Ⓥ')
+    if (cp == U'Ⓥ')
     {
         parsed = utf8_next(source, parsed, max);
         cp     = utf8_codepoint(source + parsed);
@@ -112,13 +136,26 @@ RENDER_BODY(symbol)
 //   Render the symbol into the given symbol buffer
 // ----------------------------------------------------------------------------
 {
-    size_t len    = 0;
-    utf8   txt    = o->value(&len);
-    size_t cmdlen = len;
-    auto   format = r.editing() ? ID_LongFormNames : Settings.NameDisplayMode();
-    if (r.editing() && !r.graphing())
-        if (command::lookup(txt, cmdlen) && cmdlen == len)
-            r.put(unicode(L'Ⓥ'));
+    size_t   len    = 0;
+    utf8     txt    = o->value(&len);
+    size_t   cmdlen = len;
+    auto format = r.editing() ? ID_LongFormNames : Settings.NameDisplayMode();
+    if (!unambiguous && (r.editing() || (Settings.ShowAmbiguousNames() &&
+                                         (!r.graphing() || !r.expression()))))
+    {
+        if (command::lookup(+txt, cmdlen) && cmdlen == len)
+        {
+            r.put(unicode(U'Ⓥ'));
+        }
+        else
+        {
+            // Library lookup may allocate and GC
+            gcutf8 t = txt;
+            if (o->library_lookup())
+                r.put(unicode(U'Ⓥ'));
+            txt = +t;
+        }
+    }
     r.put(format, txt, len);
     return r.size();
 }
@@ -277,6 +314,31 @@ bool symbol::found_in(object_p obj) const
 }
 
 
+object_p symbol::library_lookup() const
+// ----------------------------------------------------------------------------
+//   Find a library entry or constant for a name that has no variable
+// ----------------------------------------------------------------------------
+//   Used to prefix ambiguous names with Ⓥ
+{
+    bool xlibs  = Settings.AutomaticXLibs();
+    bool consts = Settings.AutomaticConstants();
+    if (!xlibs && !consts)
+        return nullptr;
+
+    // Copy the name, since the lookup allocates and may move the symbol
+    size_t len = 0;
+    gcutf8 txt = value(&len);
+
+    if (xlibs)
+        if (xlib_p xl = xlib::lookup(+txt, len, false))
+            return xl;
+    if (consts)
+        if (constant_p cst = constant::lookup(+txt, len, false))
+            return cst;
+    return nullptr;
+}
+
+
 GRAPH_BODY(symbol)
 // ----------------------------------------------------------------------------
 //   Render the symbol as italics
@@ -284,6 +346,7 @@ GRAPH_BODY(symbol)
 {
     using pixsize = grob::pixsize;
 
+    save<bool> su(unambiguous, true);
     grob_g sym = object::do_graph(o, g);
     if (!sym || unit::mode)
         return sym;
@@ -309,5 +372,4 @@ GRAPH_BODY(symbol)
     }
 
     return result;
-
 }

@@ -819,7 +819,8 @@ because there are constants that differ only in case, such as `ⒸG`
 (gravitational constant) and `Ⓒg` (gravitational acceleration on Earth).
 
 If a global variable with the same name exists at the time of parsing, it takes
-precedence over the constant.
+precedence over the constant. Names in single quotes like `'c'` always refer to
+variables, as well as names prefixed with `Ⓥ`.
 
 This is the opposite of `ExplicitConstants`
 
@@ -1032,6 +1033,36 @@ Disable the saving of command arguments during program execution.
 If `SaveLastArguments` is set, arguments to interactive commands will still be
 saved.
 
+## MaxNameChainLength
+
+Maximum length of a chain of names during evaluation.
+
+A name that evaluates as a name is a name chain. While evaluating names, the
+calculator will verify if you return to the original name, which indicates an
+infinite recursion. It will also limit the number of names you can chase that
+way to the value of `MaxNameChainLength` (32 by default).
+
+This is used to detect infinite recursion in programs (if the name references
+itself) or inefficient programming (if your program relies on very long chains
+of names that can presumably be simplified by the programmer).
+
+## MaxCallRecursion
+
+Maximum depth for recursive calls
+
+The `MaxCallRecursion` setting limits the number of recursive calls that are
+allowed, so that an errant RPL program is interrupted before it consumes all
+memory
+
+## MaxStackDepth
+
+Maximum stack depth during recursive function calls
+
+When a function calls itself recursively, it pushes arguments on the stack. If
+the termination condition is not correct, this may only terminate when memory is
+exhausted, which may take a long time. As a protection against unbounded
+recursion, function calls detect if the stack depth is above a certain threshold
+and if so reject the call with a `Stack is too deep` message.
 
 # Plot settings
 

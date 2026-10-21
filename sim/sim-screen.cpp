@@ -30,6 +30,7 @@
 #include "sim-screen.h"
 
 #include "dmcp.h"
+#include "recorder.h"
 #include "sim-dmcp.h"
 #include <target.h>
 
@@ -61,6 +62,8 @@ SimScreen *SimScreen::theScreen = nullptr;
 
 // A copy of the LCD buffer
 pixword lcd_copy[sizeof(lcd_buffer) / sizeof(*lcd_buffer)];
+
+RECORDER(sim_help, 32, "Simulator help LCD pixmap sync");
 
 
 SimScreen::SimScreen(QWidget *parent)
@@ -182,6 +185,9 @@ void SimScreen::updatePixmap()
 #endif
     pixword mask = ~(~0U << color::BPP);
     surface s(lcd_buffer, LCD_W, LCD_H, LCD_SCANLINE, LCD_W);
+    uint    drawn   = 0;
+    uint    skipped = 0;
+    uint    help_y  = 0;
     for (int y = 0; y < SIM_LCD_H; y++)
     {
         for (int xw = 0; xw < SIM_LCD_SCANLINE*color::BPP/32; xw++)
@@ -203,9 +209,18 @@ void SimScreen::updatePixmap()
                         pt.setPen(qcol);
 
                         coord xx = (xw * 32 + bit) / color::BPP;
+                        if (xx >= LCD_W)
+                        {
+                            if (y >= 23 && y < 217)
+                                skipped++;
+                            continue;
+                        }
                         coord yy = y;
                         s.horizontal_adjust(xx, xx);
                         s.vertical_adjust(yy, yy);
+                        if (y >= 23 && y < 217 && xx < 8)
+                            help_y++;
+                        drawn++;
 #ifdef ANDROID
                         pt.drawPoint(xx + contentXOffset, yy);
 #else
@@ -217,6 +232,9 @@ void SimScreen::updatePixmap()
             }
         }
     }
+    if (skipped || help_y)
+        record(sim_help, "pixmap drawn=%u skipped=%u help_left=%u",
+               drawn, skipped, help_y);
     pt.end();
 }
 
@@ -230,5 +248,15 @@ void SimScreen::refreshScreen()
     mainScreen->setPixmap(mainPixmap);
     QGraphicsView::update();
     redraws++;
+}
+
+
+void SimScreen::invalidate()
+// ----------------------------------------------------------------------------
+//   Force all pixels to be redrawn on the next updatePixmap() call
+// ----------------------------------------------------------------------------
+{
+    for (size_t i = 0; i < sizeof(lcd_copy) / sizeof(*lcd_copy); i++)
+        lcd_copy[i] = ~lcd_buffer[i];
 }
 #endif // WASM

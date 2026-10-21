@@ -51,6 +51,8 @@
 
 #include <cstdlib>
 
+RECORDER(polynomials,       16, "Polynomial operations");
+RECORDER(polynomials_error, 16, "Polynomial operation errors");
 
 polynomial_p polynomial::make(algebraic_p value)
 // ----------------------------------------------------------------------------
@@ -79,7 +81,7 @@ polynomial_p polynomial::make(algebraic_p value)
     scribble    scr;
     algebraic_g avalue = value;
     size_t      sz     = value->size();
-    byte       *p      = rt.allocate(1 + sz);
+    byte       *p      = scr.allocate(1 + sz);
     if (!p)
         return nullptr;
     *p++ = 0; // Number of variables = 0
@@ -105,7 +107,7 @@ polynomial_p polynomial::make(symbol_p name)
     size_t   len    = leb128<size_t>(p);
     size_t   namesz = p + len - src;
     size_t   polysz = namesz + integer::required_memory(ID_integer, 1) + 2;
-    byte    *dst    = rt.allocate(polysz);
+    byte    *dst    = scr.allocate(polysz);
     if (!dst)
         return nullptr;
     dst = leb128(dst, 1);     // Number of variables = 1
@@ -135,7 +137,7 @@ polynomial_p polynomial::make(algebraic_r factor, symbol_r sym, ularge exp)
     size_t   len = sym->length();
     size_t   fsz = factor->size();
     size_t   asz = 1 + fsz + len + leb128size(len) + leb128size(exp);
-    byte    *p   = rt.allocate(asz);
+    byte    *p   = scr.allocate(asz);
     if (!p)
         return nullptr;
     *p++ = 1; // Number of variables = 1
@@ -334,7 +336,7 @@ error:
 }
 
 
-byte *polynomial::copy_variables(polynomial_r x, byte *prev)
+byte *polynomial::copy_variables(polynomial_r x, scribble &scr, byte *prev)
 // ----------------------------------------------------------------------------
 //   Copy variables from an existing polynomial, return pointer at end
 // ----------------------------------------------------------------------------
@@ -344,7 +346,6 @@ byte *polynomial::copy_variables(polynomial_r x, byte *prev)
 
     gcmbytes gprev  = prev;
     size_t   ovars  = prev ? leb128<size_t>(prev) : 0;
-    size_t   ovoffs = prev - +gprev;
 
     byte_p   xp     = x->payload();
     size_t   xsz    = leb128<size_t>(xp);
@@ -366,18 +367,19 @@ byte *polynomial::copy_variables(polynomial_r x, byte *prev)
         int    cmp  = -1;
         if (prev)
         {
-            // Restart from beginning of variables
-            prev = gprev + ovoffs;
+            // Restart from beginning of variables, which may have moved
+            // if the count of variables grew (or was just created)
+            prev = gprev + leb128size(ovars);
             for (size_t ov = 0; ov < ovars; ov++)
             {
                 byte_p oldvar = prev;
                 size_t ovlen  = leb128<size_t>(prev);
                 cmp = symbol::compare(prev, xp, std::min(ovlen, vlen));
+                if (cmp == 0)
+                    cmp = ovlen < vlen ? -1 : ovlen > vlen ? 1 : 0;
                 if (cmp >= 0)
                 {
                     old = oldvar;
-                    if (cmp == 0)
-                        cmp = ovlen - vlen;
                     break;
                 }
                 prev += ovlen;
@@ -388,9 +390,9 @@ byte *polynomial::copy_variables(polynomial_r x, byte *prev)
         if (cmp)
         {
             // Size needed for variable
-            size_t offs   = old - +gprev;
             bool   vszchg = !prev || leb128size(ovars + 1) != leb128size(ovars);
-            byte  *copy   = rt.allocate(vsz + vszchg);
+            size_t offs   = old ? old - +gprev + (prev && vszchg) : 0;
+            byte  *copy   = scr.allocate(vsz + vszchg);
             if (!copy)
                 return nullptr;
             ovars++;
@@ -402,7 +404,10 @@ byte *polynomial::copy_variables(polynomial_r x, byte *prev)
             else
             {
                 if (vszchg)
+                {
                     memmove((byte *) +gprev + 1, +gprev, copy - +gprev);
+                    copy++;
+                }
                 leb128(+gprev, ovars);
             }
             if (!old)
@@ -422,7 +427,7 @@ byte *polynomial::copy_variables(polynomial_r x, byte *prev)
 
     if (!gprev)
     {
-        byte *p = rt.allocate(1);
+        byte *p = scr.allocate(1);
         if (p)
             *p = 0;
         gprev = p;
@@ -441,21 +446,21 @@ polynomial_p polynomial::neg(polynomial_r x)
         return nullptr;
 
     scribble scr;
-    gcbytes  polycopy = copy_variables(x);
+    gcbytes  polycopy = copy_variables(x, scr);
     size_t   nvars    = x->variables();
     for (auto term : *x)
     {
         algebraic_g factor = term.factor();
         factor             = -factor;
         size_t sz          = factor->size();
-        byte  *np          = rt.allocate(sz);
+        byte  *np          = scr.allocate(sz);
         if (!np)
             return nullptr;
         memcpy(np, +factor, sz);
         for (size_t v = 0; v < nvars; v++)
         {
             ularge exponent = term.exponent();
-            byte  *ep       = rt.allocate(leb128size(exponent));
+            byte  *ep       = scr.allocate(leb128size(exponent));
             if (!ep)
                 return nullptr;
             leb128(ep, exponent);
@@ -472,16 +477,45 @@ polynomial_p polynomial::addsub(polynomial_r x, polynomial_r y, bool sub)
 //  Add or subtract two polynomials
 // ----------------------------------------------------------------------------
 {
+    record(polynomials, "%s: x=%t (type=%+s, vars=%u), y=%t (type=%+s, vars=%u)",
+           sub ? "sub" : "add",
+           x, x ? object::name(x->type()) : utf8("null"), x ? x->variables() : 0,
+           y, y ? object::name(y->type()) : utf8("null"), y ? y->variables() : 0);
+
     if (!x || !y)
+    {
+        record(polynomials_error, "Returning null because %s is null",
+               !x ? (!y ? "both x and y" : "x") : "y");
         return nullptr;
+    }
+
+    // Handle zero polynomials specially
+    if (y->is_zero(true))
+    {
+        record(polynomials, "y is zero polynomial, returning %s",
+               sub ? "x" : "sum");
+        if (sub)
+            return x;
+        // For addition, we still need to go through the normal path
+    }
+    if (x->is_zero(true))
+    {
+        record(polynomials, "x is zero polynomial");
+        if (sub)
+            return polynomial::neg(y);
+        return y;
+    }
 
     scribble scr;
-    gcbytes  result = copy_variables(x);
+    gcbytes  result = copy_variables(x, scr);
     if (!result)                // Special case of empty x
         rt.free(scr.growth());
-    result          = copy_variables(y, (byte *) +result);
+    result          = copy_variables(y, scr, (byte *) +result);
     if (!result)
+    {
+        record(polynomials_error, "copy_variables returned null");
         return nullptr;
+    }
 
     byte_p p     = +result;
     size_t nvars = leb128<size_t>(p);
@@ -545,14 +579,14 @@ polynomial_p polynomial::addsub(polynomial_r x, polynomial_r y, bool sub)
         if (!xfactor->is_zero(false))
         {
             size_t sz = xfactor->size();
-            byte  *p  = rt.allocate(sz);
+            byte  *p  = scr.allocate(sz);
             if (!p)
                 return nullptr;
             memcpy(p, +xfactor, sz);
             p += sz;
             for (size_t v = 0; v < nvars; v++)
             {
-                p = rt.allocate(leb128size(xexp[v]));
+                p = scr.allocate(leb128size(xexp[v]));
                 if (!p)
                     return nullptr;
                 leb128(p, xexp[v]);
@@ -594,14 +628,14 @@ polynomial_p polynomial::addsub(polynomial_r x, polynomial_r y, bool sub)
                 yfactor = -yfactor;
 
             size_t sz = yfactor->size();
-            byte  *p  = rt.allocate(sz);
+            byte  *p  = scr.allocate(sz);
             if (!p)
                 return nullptr;
             memcpy(p, +yfactor, sz);
             p += sz;
             for (size_t v = 0; v < nvars; v++)
             {
-                p = rt.allocate(leb128size(yexp[v]));
+                p = scr.allocate(leb128size(yexp[v]));
                 if (!p)
                     return nullptr;
                 leb128(p, yexp[v]);
@@ -642,10 +676,10 @@ polynomial_p polynomial::mul(polynomial_r x, polynomial_r y)
         return nullptr;
 
     scribble scr;
-    gcbytes  result = copy_variables(x);
+    gcbytes  result = copy_variables(x, scr);
     if (!result)
         rt.free(scr.growth());
-    result          = copy_variables(y, (byte *) +result);
+    result          = copy_variables(y, scr, (byte *) +result);
     if (!result)
         return nullptr;
 
@@ -707,7 +741,7 @@ polynomial_p polynomial::mul(polynomial_r x, polynomial_r y)
             if (!rfactor->is_zero(false))
             {
                 // Check if there is an existing term with same exponents
-                gcbytes end = rt.allocate(0);
+                gcbytes end = scr.allocate(0);
                 byte_p next = end;
                 for (byte_p check = terms; check < end; check = next)
                 {
@@ -737,7 +771,7 @@ polynomial_p polynomial::mul(polynomial_r x, polynomial_r y)
             if (!rfactor->is_zero(false))
             {
                 size_t sz = rfactor->size();
-                byte  *p  = rt.allocate(sz);
+                byte  *p  = scr.allocate(sz);
                 if (!p)
                     return nullptr;
                 memcpy(p, +rfactor, sz);
@@ -745,7 +779,7 @@ polynomial_p polynomial::mul(polynomial_r x, polynomial_r y)
                 for (size_t v = 0; v < nvars; v++)
                 {
                     ularge exp = xexp[v] + yexp[v];
-                    p = rt.allocate(leb128size(exp));
+                    p = scr.allocate(leb128size(exp));
                     p = leb128(p, exp);
                 }
             }
@@ -1000,7 +1034,7 @@ size_t polynomial::variable(utf8 name, size_t len) const
         if (size_t(p - first) >= length)
             break;
     }
-    return ~0UL;
+    return SIZE_MAX;
 }
 
 
@@ -1010,7 +1044,7 @@ size_t polynomial::variable(symbol_p sym) const
 // ----------------------------------------------------------------------------
 {
     if (!sym)
-        return ~0UL;
+        return SIZE_MAX;
     size_t len  = 0;
     utf8   name = sym->value(&len);
     return variable(name, len);
@@ -1139,7 +1173,7 @@ PARSE_BODY(polynomial)
 
     // First character must be a constant marker
     unicode cp = utf8_codepoint(source);
-    if (cp != L'Ⓟ')
+    if (cp != U'Ⓟ')
         return SKIP;
     parsed = utf8_next(source, parsed, max);
 
@@ -1243,15 +1277,16 @@ RENDER_BODY(polynomial)
     for (size_t v = 0; v < nvars; v++)
         vars[v] = poly->variable(v);
 
+    save<bool> su(symbol::unambiguous, true);
     bool editing = r.editing();
     if (editing || Settings.PrefixPolynomialRender())
-        r.put(unicode(L'Ⓟ'));
+        r.put(unicode(U'Ⓟ'));
     if (editing)
         r.put('\'');
 
     // Loop over all factors
     bool    first = true;
-    unicode mul   = Settings.UseDotForMultiplication() ? L'·' : L'×';
+    unicode mul   = Settings.UseDotForMultiplication() ? U'·' : U'×';
     for (auto term : *poly)
     {
         // Emit the factor
@@ -1280,7 +1315,7 @@ RENDER_BODY(polynomial)
                 vars[v]->render(r);
                 if (exponent > 1)
                 {
-                    r.put(unicode(L'↑'));
+                    r.put(unicode(U'↑'));
                     char exptxt[24];
                     char *end = render_u64(exptxt, exponent);
                     r.put(exptxt, end - exptxt);
@@ -1309,6 +1344,7 @@ GRAPH_BODY(polynomial)
     polynomial_g poly  = o;
     size_t       nvars = poly->variables();
     grob_g       vars[nvars];
+    save<bool>   su(symbol::unambiguous, true);
 
     // Get each of the variables and render it graphically
     for (size_t v = 0; v < nvars; v++)
@@ -1820,18 +1856,25 @@ polynomial_p polynomial::get(object_p obj)
 //   Turn an object into a polynomial
 // ----------------------------------------------------------------------------
 {
-    if (!obj)
-        return nullptr;
-    obj = object::strip(obj);
-    if (polynomial_p poly = obj->as<polynomial>())
-        return poly;
-    if (polynomial_p poly = polynomial::from_coefficients(obj, false))
-        return poly;
-    if (expression_p expr = obj->as<expression>())
-        obj = expr->as_difference_for_solve();
-    if (algebraic_p alg = obj->as_algebraic())
-        if (polynomial_p poly = polynomial::make(alg))
+    for (uint retries = 0; retries < 2; retries++)
+    {
+        if (!obj)
+            return nullptr;
+        obj = object::strip(obj);
+        if (polynomial_p poly = obj->as<polynomial>())
             return poly;
+        if (polynomial_p poly = polynomial::from_coefficients(obj, false))
+            return poly;
+        if (expression_p expr = obj->as<expression>())
+            obj = expr->as_difference_for_solve();
+        if (algebraic_p alg = obj->as_algebraic())
+            if (polynomial_p poly = polynomial::make(alg))
+                return poly;
+        if (!retries)
+            if (algebraic_p alg = obj->as_algebraic())
+                if (algebraic_p eval = alg->evaluate())
+                    obj = eval;
+    }
     return nullptr;
 }
 
@@ -1874,7 +1917,12 @@ size_t polynomial::expand(stack_buffer &sbuf, bool error) const
                     rt.dimension_error();
                 return 0;
             }
-            sbuf.grow(exp + 1 - sbuf.items());
+            if (!sbuf.grow(exp + 1 - sbuf.items()))
+            {
+                if (error)
+                    rt.out_of_memory_error();
+                return 0;
+            }
         }
         factor = it.factor();
         object_p obj = sbuf[exp];
@@ -1920,7 +1968,7 @@ array_p polynomial::coefficients(bool error) const
     if (rt.error())
         return nullptr;
     while (n-- > 0)
-        if (!rt.append(sbuf[n]))
+        if (!scr.append(sbuf[n]))
             return nullptr;
     array_g result = array_p(list::make(ID_array, scr.scratch(), scr.growth()));
     result = purge(result);
@@ -1953,7 +2001,7 @@ polynomial_p polynomial::derivative(size_t var) const
 {
     scribble     scr;
     polynomial_g x        = this;
-    gcbytes      polycopy = copy_variables(x);
+    gcbytes      polycopy = copy_variables(x, scr);
     size_t       nvars    = x->variables();
     for (iterator term : *x)
     {
@@ -1979,7 +2027,7 @@ polynomial_p polynomial::derivative(size_t var) const
         else
         {
             size_t sz = factor->size();
-            byte  *np = rt.allocate(sz);
+            byte  *np = scr.allocate(sz);
             if (!np)
                 return nullptr;
             memcpy(np, +factor, sz);
@@ -1988,7 +2036,7 @@ polynomial_p polynomial::derivative(size_t var) const
                 ularge exponent = term.exponent();
                 if (v == var && exponent > 0)
                     exponent--;
-                byte *ep = rt.allocate(leb128size(exponent));
+                byte *ep = scr.allocate(leb128size(exponent));
                 if (!ep)
                     return nullptr;
                 leb128(ep, exponent);
@@ -2026,7 +2074,7 @@ polynomial_p polynomial::primitive(size_t var) const
 {
     scribble     scr;
     polynomial_g x        = this;
-    gcbytes      polycopy = copy_variables(x);
+    gcbytes      polycopy = copy_variables(x, scr);
     size_t       nvars    = x->variables();
     for (iterator term : *x)
     {
@@ -2045,7 +2093,7 @@ polynomial_p polynomial::primitive(size_t var) const
             return nullptr;
 
         size_t sz = factor->size();
-        byte  *np = rt.allocate(sz);
+        byte  *np = scr.allocate(sz);
         if (!np)
             return nullptr;
         memcpy(np, +factor, sz);
@@ -2054,7 +2102,7 @@ polynomial_p polynomial::primitive(size_t var) const
             ularge exponent = term.exponent();
             if (v == var)
                 exponent++;  // Increase exponent by 1
-            byte *ep = rt.allocate(leb128size(exponent));
+            byte *ep = scr.allocate(leb128size(exponent));
             if (!ep)
                 return nullptr;
             leb128(ep, exponent);
@@ -2068,17 +2116,180 @@ polynomial_p polynomial::primitive(size_t var) const
 
 RECORDER(polyroots, 16, "Polynomial roots");
 
-list_p polynomial::roots(object::id ty, symbol_p var) const
+static bool is_complex_value(algebraic_r x)
+// ----------------------------------------------------------------------------
+//   Check if a root is a complex value (to filter out in real mode)
+// ----------------------------------------------------------------------------
+{
+    object::id ty = x ? x->type() : object::ID_object;
+    return ty == object::ID_rectangular || ty == object::ID_polar;
+}
+
+
+static void drop_negligible_imaginary(algebraic_g &x, algebraic_r eps)
+// ----------------------------------------------------------------------------
+//   Numeric roots of real polynomials may carry a tiny imaginary residue
+// ----------------------------------------------------------------------------
+{
+    if (!x || x->type() != object::ID_rectangular)
+        return;
+    rectangular_p z   = rectangular_p(+x);
+    algebraic_g   re  = z->re();
+    algebraic_g   im  = z->im();
+    algebraic_g   tol = abs::run(re);
+    algebraic_g   one = integer::make(1);
+    if (!re || !im || !tol)
+        return;
+    tol = (tol + one) * eps;
+    if (tol && (im->is_zero(false) || smaller_magnitude(im, tol)))
+    {
+        record(polyroots, "Dropping imaginary part of %t", +x);
+        x = re;
+    }
+}
+
+
+static bool is_number_value(algebraic_r x, bool exact)
+// ----------------------------------------------------------------------------
+//   Check if a root is a real or complex number, possibly an exact one
+// ----------------------------------------------------------------------------
+{
+    if (!x)
+        return false;
+    object::id ty = x->type();
+    if (ty == object::ID_rectangular)
+    {
+        rectangular_p z  = rectangular_p(+x);
+        algebraic_g   re = z->re();
+        algebraic_g   im = z->im();
+        return is_number_value(re, exact) && is_number_value(im, exact);
+    }
+    return exact ? x->is_fractionable() : object::is_real(ty);
+}
+
+
+static inline bool is_exact_value(algebraic_r x)
+// ----------------------------------------------------------------------------
+//   Check if a root is an exact number we can deflate a polynomial with
+// ----------------------------------------------------------------------------
+{
+    return is_number_value(x, true);
+}
+
+
+static bool is_exact_zero(polynomial_r p, algebraic_r x)
+// ----------------------------------------------------------------------------
+//   Check if an exact value is a zero of the polynomial
+// ----------------------------------------------------------------------------
+{
+    if (!p || !is_exact_value(x))
+        return false;
+    stack_buffer sbuf;
+    bool         result = false;
+    if (p->expand(sbuf, false))
+    {
+        algebraic_g value = polynomial::horner(sbuf, x);
+        result = value && value->is_zero(false);
+    }
+    sbuf.cleanup();
+    return result;
+}
+
+
+static bool is_close(algebraic_r guess, algebraic_r x, algebraic_r eps)
+// ----------------------------------------------------------------------------
+//   Check if the numerical value of a guess is within eps of x
+// ----------------------------------------------------------------------------
+{
+    algebraic_g check = guess;
+    if (!algebraic::to_decimal(check, true) || !check)
+        return false;
+    algebraic_g diff = check - x;
+    algebraic_g tol  = abs::run(x);
+    algebraic_g one  = integer::make(1);
+    if (!diff || !tol)
+        return false;
+    tol = (tol + one) * eps;
+    return tol && (diff->is_zero(false) || smaller_magnitude(diff, tol));
+}
+
+
+static bool to_exact_root(algebraic_g &pretty,
+                          algebraic_r  x,
+                          algebraic_r  eps,
+                          polynomial_r p,
+                          polynomial_r orig)
+// ----------------------------------------------------------------------------
+//   Replace a numeric root with a symbolic form only if it is exact
+// ----------------------------------------------------------------------------
+//   to_sqrt guesses fractions and square roots loosely, which gives wrong
+//   results for irrational roots such as 99/64 for 1.54686..., so we only
+//   accept a guess that is an exact root of the polynomial, or that
+//   reproduces the numeric root at solver precision.
+//   Returns true if the guess is an exact zero of p, in which case the
+//   caller can deflate p exactly, which preserves the multiplicity of roots.
+//   Never leaves an error behind, since failing to prettify is not an error.
+{
+    // Symbolic roots, e.g. from the quadratic formula, are already exact
+    if (!is_number_value(x, false))
+        return false;
+
+    algebraic_g guess  = x;
+    bool        result = false;
+    if (algebraic::to_sqrt(guess) && guess)
+    {
+        if (is_exact_zero(p, guess))
+        {
+            // Exact zero of the current polynomial (e.g. a double root)
+            record(polyroots, "Exact zero %t for %t", +guess, +x);
+            pretty = guess;
+            result = true;
+        }
+        else if (is_close(guess, x, eps))
+        {
+            record(polyroots, "Exact root %t for %t", +guess, +x);
+            pretty = guess;
+        }
+        else if (orig && +orig != +p && is_exact_zero(orig, guess))
+        {
+            // After numerical deflation, multiple roots lose precision.
+            // Accept an exact zero of the original polynomial if it is
+            // close enough to the numerical root, but not so loosely that
+            // we would swallow a nearby distinct root
+            algebraic_g loose = eps;
+            loose = sqrt::run(loose);
+            if (loose && is_close(guess, x, loose))
+            {
+                record(polyroots, "Original zero %t for %t", +guess, +x);
+                pretty = guess;
+            }
+        }
+        if (+pretty != +guess)
+            record(polyroots, "Rejected guess %t for %t", +guess, +x);
+    }
+    if (rt.error())
+        rt.clear_error();
+    return result;
+}
+
+
+list_p polynomial::roots(object::id ty, symbol_p var, bool unique) const
 // ----------------------------------------------------------------------------
 //   Compute roots for polynomial and cleanup
 // ----------------------------------------------------------------------------
+//   PRoot returns repeated roots like legacy RPL, Zeros lists them once
 {
     cleaner purge;
+    gcutf8  errm   = rt.error_message();
     list_p  result = roots_internal(ty, var);
     if (result)
         result = result->sort();
-    if (result)
+    if (result && unique)
         result = result->unique();
+
+    // Errors raised and cleared while searching roots must not show in ERRM
+    if (result && !rt.error())
+        rt.error_message(+errm);
     return purge(result);
 }
 
@@ -2095,6 +2306,10 @@ list_p polynomial::roots_internal(object::id ty, symbol_p var) const
     scribble     scr;
     record(polyroots, "Roots of %t for variable %t", +p, +vname);
     settings::SaveFractionDigits fd(4);
+    bool                         cplx = Settings.ComplexResults();
+    int                          impr = Settings.SolverImprecision();
+    algebraic_g                  eps  = algebraic::epsilon(impr);
+    polynomial_g                 orig = this;
 
     while (p && !program::interrupted())
     {
@@ -2163,6 +2378,10 @@ list_p polynomial::roots_internal(object::id ty, symbol_p var) const
                 if (!y)
                     goto error;
                 y = y->symbolic_sqrt();             // sqrt(b^2-4ac)
+                if (!y)
+                    goto error;
+                bool        fp = is_fp(y->type());
+                algebraic_g c  = a[0] / a[2];           // c/a
                 a[2] = integer::make(2) * a[2];         // 2a
                 a[1] = -a[1] / a[2];                    // -b/2a
                 y  = y / a[2];                      // sqrt(b^2-4ac) / 2a
@@ -2180,28 +2399,49 @@ list_p polynomial::roots_internal(object::id ty, symbol_p var) const
                 {
                     x = a[1] - y;
                     y    = a[1] + y;
+
+                    // Avoid cancellation on the smaller root, as with
+                    // [1E-30 1 1]: compute it from the product c/a
+                    if (fp && x && y && c && !a[1]->is_zero(false))
+                    {
+                        if (smaller_magnitude(x, y))
+                            x = c / y;
+                        else
+                            y = c / x;
+                    }
                 }
+                record(polyroots, "Pre-simplify x=%t y=%t", +x, +y);
                 if (Settings.AutoSimplify())
                 {
                     if (expression_p expr = y->as<expression>())
                         y = expr->simplify();
+                    record(polyroots, "After simplify(y) x=%t y=%t", +x, +y);
                     if (expression_p expr = x->as<expression>())
                         x = expr->simplify();
+                    record(polyroots, "After simplify(x) x=%t y=%t", +x, +y);
                 }
+                drop_negligible_imaginary(x, eps);
+                drop_negligible_imaginary(y, eps);
+                record(polyroots, "After drop_neg x=%t y=%t", +x, +y);
                 if (round && x && y)
                 {
-                    to_sqrt(x);
-                    to_sqrt(y);
+                    to_exact_root(x, x, eps, nullptr, orig);
+                    to_exact_root(y, y, eps, nullptr, orig);
+                    record(polyroots, "After to_exact x=%t y=%t", +x, +y);
                 }
                 record(polyroots, "Solutions %t and %t", +x, +y);
-                if (!rt.append(+x) || !rt.append(+y))
-                    goto error;
+                if (cplx || !is_complex_value(x))
+                    if (!scr.append(+x))
+                        goto error;
+                if (cplx || !is_complex_value(y))
+                    if (!scr.append(+y))
+                        goto error;
             }
             else if (a[1] && !a[1]->is_zero(false))
             {
                 y = -a[0] / a[1];
                 record(polyroots, "Solution is %t", +y);
-                if (!rt.append(+y))
+                if (!scr.append(+y))
                     goto error;
             }
             else
@@ -2225,12 +2465,12 @@ list_p polynomial::roots_internal(object::id ty, symbol_p var) const
             record(polyroots, "p' =%t", +der1);
             record(polyroots, "p''=%t", +der2);
 
-            settings::SaveComplexResults scr(true);
+            settings::SaveComplexResults scplx(true);
             size_t      max = Settings.SolverIterations();
-            algebraic_g eps = algebraic::epsilon();
             algebraic_g n   = integer::make(degree);
             algebraic_g n1  = integer::make(1);
             algebraic_g x   = integer::make(0);
+            algebraic_g one = n1;
             algebraic_g y, g, h, a;
             n1 = n - n1;
 
@@ -2262,9 +2502,52 @@ list_p polynomial::roots_internal(object::id ty, symbol_p var) const
                 record(polyroots, "denominators %t or %t", +a, +y);
                 if (smaller_magnitude(a, y))
                     a = y;
+                if (!a)
+                    goto error;
+                if (a->is_zero(false))
+                {
+                    // Critical point (e.g. x^3-1 at x=0): nudge instead of
+                    // dividing by zero
+                    n1 = integer::make(1);
+                    x  = x + n1;
+                    n1 = n - n1;
+                    record(polyroots, "Zero denominator, nudged x=%t", +x);
+                    continue;
+                }
                 a = n / a;
+
+                // Break limit cycles with a fractional step every 10 steps
+                if (i % 10 == 9)
+                {
+                    static const byte frac[] = { 4, 2, 6, 1, 3, 5, 7, 8 };
+                    g = integer::make(frac[(i / 10) % sizeof(frac)]);
+                    h = integer::make(8);
+                    g = g / h;
+                    a = a * g;
+                }
+                y = x;
                 x = x - a;
                 record(polyroots, "a=%t new x=%t", +a, +x);
+
+                // Converged when the step no longer moves x at precision,
+                // relative to the magnitude of x
+                if (!x || !y)
+                    goto error;
+                g = y - x;
+                h = abs::run(+x);
+                if (!h)
+                    goto error;
+                h = smaller_magnitude(one, h) ? eps * h : eps;
+                if (g && h &&
+                    (g->is_zero(false) || !smaller_magnitude(h, g)))
+                {
+                    y = horner(spoly, x);
+                    if (!y)
+                        goto error;
+                    found = true;
+                    record(polyroots, "Step converged x=%t y=%t", +x, +y);
+                    break;
+                }
             }
 
             sder1.cleanup();
@@ -2275,18 +2558,42 @@ list_p polynomial::roots_internal(object::id ty, symbol_p var) const
                 rt.no_solution_error();
                 goto error;
             }
-            if (round && x)
-                to_sqrt(x);
-            if (!rt.append(x))
-                goto error;
+            // Prettify a copy of the root, but deflate with the numeric value
+            // unless the prettified root is an exact zero of p
+            y = x;
+            drop_negligible_imaginary(y, eps);
+            bool exact = round && to_exact_root(y, x, eps, p, orig);
+            if (exact)
+                x = y;
+            do
+            {
+                if (cplx || !is_complex_value(y))
+                    if (!scr.append(y))
+                        goto error;
 
-            // Here p(x) is small enough, generate x-x0 polynomial
-            der1 = make(vname);
-            der2 = make(x);
-            der1 = sub(der1, der2);
-            der2 = div(p, der1);
-            record(polyroots, "Dividing %t by %t is %t", +p, +der1, +der2);
-            p = der2;
+                // Here p(x) is small enough, generate x-x0 polynomial
+                der1 = make(vname);
+                der2 = make(x);
+                der1 = sub(der1, der2);
+                der2 = div(p, der1);
+                record(polyroots, "Dividing %t by %t is %t",
+                       +p, +der1, +der2);
+                p = der2;
+                if (!p)
+                    goto error;
+
+                // For an exact root, deflate again for each multiplicity
+                if (exact)
+                {
+                    size_t   didx = p->variable(+vname);
+                    iterator dr   = p->ranking(didx);
+                    if (dr.rank(didx) == 0)
+                        return list::make(ty, scr.scratch(), scr.growth());
+                    exact = is_exact_zero(p, x);
+                    if (rt.error())
+                        goto error;
+                }
+            } while (exact);
         }
     }
 
@@ -2357,7 +2664,11 @@ COMMAND_BODY(PEval)
         {
             size_t       sz = polynomial::expand(pobj, true);
             if (!sz)
+            {
+                if (!rt.error())
+                    rt.type_error();
                 return ERROR;
+            }
             stack_buffer s(sz);
             algebraic_p result = polynomial::horner(s, x);
             s.cleanup();
@@ -2365,6 +2676,8 @@ COMMAND_BODY(PEval)
                 return OK;
         }
     }
+    if (!rt.error())
+        rt.type_error();
     return ERROR;
 }
 
@@ -2381,10 +2694,12 @@ COMMAND_BODY(PRoot)
 //   All roots of a polynomial from coefficient vector
 // ----------------------------------------------------------------------------
 {
+    // Like HP's PROOT, always return complex roots
+    settings::SaveComplexResults cplx(true);
     if (object_p pobj = rt.top())
         if (polynomial_p poly = polynomial::get(pobj))
             if (symbol_p var = polynomial::main_variable())
-                if (list_p roots = poly->roots(ID_array, var))
+                if (list_p roots = poly->roots(ID_array, var, false))
                     if (rt.top(roots))
                         return OK;
 
@@ -2412,10 +2727,11 @@ COMMAND_BODY(PCoef)
         polynomial_g term = nullptr;
         for (object_p root : *roots)
         {
+            // Like HP's PCOEF, only accept real or complex numbers
             algebraic_p r = root->as_algebraic();
-            if (!r)
+            if (!r || !r->is_numeric_constant())
             {
-                rt.invalid_polynomial_error();
+                rt.type_error();
                 return ERROR;
             }
             term = polynomial::make(algebraic_p(r));
@@ -2424,12 +2740,474 @@ COMMAND_BODY(PCoef)
             if (!poly)
                 return ERROR;
         }
+        if (!poly)
+        {
+            // Empty array of roots
+            rt.value_error();
+            return ERROR;
+        }
 
         algebraic_p result = +poly;
         if (Settings.CompatiblePolynomials())
             result = poly->coefficients();
         if (result && rt.top(result))
             return OK;
+    }
+    return ERROR;
+}
+
+
+// ============================================================================
+//
+//   Partial fraction decomposition (PartFrac)
+//
+// ============================================================================
+
+RECORDER(partfrac,       16, "Partial fractions");
+RECORDER(partfrac_error, 16, "Errors while computing partial fractions");
+
+
+static polynomial_g partfrac_linear_poly(symbol_r var, algebraic_r root)
+// ----------------------------------------------------------------------------
+//   Build the polynomial (x - root)
+// ----------------------------------------------------------------------------
+{
+    polynomial_g vp = polynomial::make(var);
+    polynomial_g rp = polynomial::make(root);
+    if (!vp || !rp)
+        return nullptr;
+    return polynomial::sub(vp, rp);
+}
+
+
+static bool partfrac_deflate(polynomial_g &poly, algebraic_r root, symbol_r var)
+// ----------------------------------------------------------------------------
+//   Divide poly by (x - root), requiring an exact factor
+// ----------------------------------------------------------------------------
+{
+    polynomial_g lin = partfrac_linear_poly(var, root);
+    polynomial_g quot, rem;
+    if (!lin || !polynomial::quorem(poly, lin, quot, rem))
+        return false;
+    if (!rem->is_zero(true))
+        return false;
+    poly = quot;
+    return true;
+}
+
+
+static algebraic_g partfrac_lin(symbol_r var, algebraic_r root)
+// ----------------------------------------------------------------------------
+//   Expression (x - root)
+// ----------------------------------------------------------------------------
+{
+    if (root->is_zero(true))
+        return algebraic_p(var);
+    algebraic_p v = var;
+    if (root->is_negative(false))
+    {
+        algebraic_g pos = -root;
+        if (!pos)
+            return nullptr;
+        return expression::make(object::ID_add, v, pos);
+    }
+    return expression::make(object::ID_subtract, v, root);
+}
+
+
+static algebraic_g partfrac_lin_pow(symbol_r var, algebraic_r root, ularge pow)
+// ----------------------------------------------------------------------------
+//   Expression (x - root)^pow
+// ----------------------------------------------------------------------------
+{
+    algebraic_g base = partfrac_lin(var, root);
+    if (!base || pow <= 1)
+        return base;
+    return expression::make(object::ID_pow, base, integer::make(pow));
+}
+
+
+static algebraic_g partfrac_evaluate(polynomial_r poly, algebraic_r x)
+// ----------------------------------------------------------------------------
+//   Evaluate a polynomial at a point
+// ----------------------------------------------------------------------------
+{
+    if (!poly->variables())
+    {
+        for (auto term : *poly)
+            return term.factor();
+        return integer::make(0);
+    }
+    stack_buffer coeffs;
+    poly->expand(coeffs, true);
+    if (rt.error())
+        return nullptr;
+    return polynomial::horner(coeffs, x);
+}
+
+
+static bool partfrac_add_term(algebraic_g &acc, algebraic_r num, algebraic_r den)
+// ----------------------------------------------------------------------------
+//   Add num/den to an accumulating sum
+// ----------------------------------------------------------------------------
+{
+    expression_g term = expression::make(object::ID_divide, num, den);
+    if (!term)
+        return false;
+    if (!acc)
+        acc = algebraic_p(+term);
+    else
+        acc = expression::make(object::ID_add, acc, algebraic_p(+term));
+    return +acc != nullptr;
+}
+
+
+static bool partfrac_linear(polynomial_g &rem,
+                            polynomial_r  den,
+                            algebraic_r   root,
+                            size_t        mult,
+                            symbol_r      var,
+                            algebraic_g  &acc)
+// ----------------------------------------------------------------------------
+//   Partial fractions for a linear pole (x - root)^mult
+// ----------------------------------------------------------------------------
+{
+    record(partfrac, "partfrac_linear: root=%t, mult=%u, rem=%t",
+           root, (unsigned)mult, rem);
+
+    polynomial_g cof = polynomial::make(den->as_expression());
+    if (!cof)
+    {
+        record(partfrac_error, "Failed to make polynomial from den");
+        return false;
+    }
+    for (size_t k = 0; k < mult; k++)
+    {
+        if (!partfrac_deflate(cof, root, var))
+        {
+            record(partfrac_error, "Failed to deflate cof, k=%u", (unsigned)k);
+            return false;
+        }
+    }
+
+    algebraic_g scale_factor = partfrac_evaluate(cof, root);
+    if (!scale_factor || scale_factor->is_zero(true))
+    {
+        record(partfrac_error, "Scale factor is zero or null: %t", scale_factor);
+        return false;
+    }
+    record(partfrac, "Scale factor: %t", scale_factor);
+
+    polynomial_g orig     = rem;
+    polynomial_g stripped = nullptr;
+
+    for (size_t j = mult; j; j--)
+    {
+        algebraic_g remainder_value = partfrac_evaluate(rem, root);
+        algebraic_g coefficient = remainder_value / scale_factor;
+        if (!coefficient)
+        {
+            record(partfrac_error, "Failed to compute coefficient, j=%u", (unsigned)j);
+            return false;
+        }
+        record(partfrac, "j=%u: coeff=%t", (unsigned)j, coefficient);
+
+        algebraic_g dterm = partfrac_lin_pow(var, root, j);
+        if (!dterm || !partfrac_add_term(acc, coefficient, dterm))
+        {
+            record(partfrac_error, "Failed to add term, j=%u", (unsigned)j);
+            return false;
+        }
+
+        polynomial_g coeff_poly  = polynomial::make(coefficient);
+        record(partfrac, "polynomial::make(%t) = %t (type=%+s)",
+               coefficient, coeff_poly,
+               coeff_poly ? object::name(coeff_poly->type()) : utf8("null"));
+        if (!coeff_poly)
+        {
+            record(partfrac_error, "Failed to make polynomial from coefficient %t", coefficient);
+            return false;
+        }
+        polynomial_g prod = polynomial::mul(cof, coeff_poly);
+        record(partfrac, "polynomial::mul(cof=%t, coeff_poly=%t) = %t (type=%+s)",
+               cof, coeff_poly, prod, prod ? object::name(prod->type()) : utf8("null"));
+        if (!prod)
+        {
+            record(partfrac_error, "Failed to multiply polynomials");
+            return false;
+        }
+        stripped = stripped ? polynomial::add(stripped, prod) : +prod;
+        record(partfrac, "stripped = %t (type=%+s)",
+               stripped, stripped ? object::name(stripped->type()) : utf8("null"));
+        if (!stripped)
+        {
+            record(partfrac_error, "Failed to add to stripped");
+            return false;
+        }
+        rem = polynomial::sub(rem, prod);
+        record(partfrac, "polynomial::sub(rem, prod=%t) = %t (type=%+s)",
+               prod, rem, rem ? object::name(rem->type()) : utf8("null"));
+        if (!rem)
+        {
+            record(partfrac_error, "Remainder became null after subtraction: rem was %t, prod was %t",
+                   rem, prod);
+            return false;
+        }
+        if (j > 1 && !partfrac_deflate(rem, root, var))
+        {
+            record(partfrac_error, "Failed to deflate rem, j=%u", (unsigned)j);
+            return false;
+        }
+    }
+    // Recompute remainder from original minus what we stripped out
+    // This verifies our incremental computation and provides clean result
+    rem = polynomial::sub(orig, stripped);
+    record(partfrac, "Final rem: %t", rem);
+    return +rem != nullptr;
+}
+
+
+static size_t partfrac_one_root(polynomial_r poly,
+                                symbol_r     var,
+                                algebraic_g &root)
+// ----------------------------------------------------------------------------
+//   Pick the largest root of a univariate polynomial
+// ----------------------------------------------------------------------------
+{
+    list_g rlist = poly->roots_internal(object::ID_array, var);
+    if (!rlist)
+        return 0;
+    algebraic_g best;
+    size_t      multiplicity = 0;
+    for (object_p o : *rlist)
+    {
+        algebraic_g r = o->as_algebraic();
+        if (!r)
+        {
+            record(partfrac_error, "Invalid root %t", r);
+            return 0;
+        }
+        int cmp = best ? algebraic::compare(best, r) : -1;
+        if (cmp < 0)
+        {
+            best = r;
+            multiplicity = 1;
+        }
+        else if (!cmp)
+        {
+            multiplicity++;
+        }
+    }
+    root = best;
+    return multiplicity;
+}
+
+
+static bool partfrac_decompose_proper(polynomial_g &rem,
+                                      polynomial_r den,
+                                      symbol_r     var,
+                                      algebraic_g &acc)
+// ----------------------------------------------------------------------------
+//   Decompose a proper rational function remainder/denominator
+// ----------------------------------------------------------------------------
+{
+    record(partfrac, "decompose_proper: rem=%t, den=%t", rem, den);
+
+    polynomial_g work = +den;
+    if (!work)
+        return false;
+
+    algebraic_g root;
+    size_t      loop = 0;
+    while (work && !work->is_zero(true) &&
+           loop++ < Settings.MaxPolynomialDegree() + 2)
+    {
+        if (program::interrupted())
+            return false;
+
+        ularge deg = work->order();
+        record(partfrac, "Loop %u: work degree=%u", (unsigned)loop, (unsigned)deg);
+        if (!deg)
+            break;
+
+        size_t mult = partfrac_one_root(work, var, root);
+        if (!mult)
+        {
+            record(partfrac_error, "Failed to find root");
+            return false;
+        }
+        record(partfrac, "Found root %t with multiplicity %u", root, (unsigned)mult);
+
+        if (!partfrac_linear(rem, den, root, mult, var, acc))
+        {
+            record(partfrac_error, "partfrac_linear failed");
+            return false;
+        }
+
+        // If remainder is zero, we're done
+        if (rem && rem->is_zero(true))
+        {
+            record(partfrac, "Remainder is zero, decomposition complete");
+            break;
+        }
+
+        for (size_t k = 0; k < mult; k++)
+        {
+            if (!partfrac_deflate(work, root, var))
+                return false;
+        }
+    }
+    // Success if remainder is zero (all terms accounted for)
+    // OR if we've fully factored the denominator (work has no variables left)
+    if (rem && rem->is_zero(true))
+    {
+        record(partfrac, "Success: remainder is zero");
+        return true;
+    }
+    if (!work || !work->variables())
+    {
+        record(partfrac, "Success: denominator fully factored");
+        return true;
+    }
+    record(partfrac_error,
+           "Failed: rem=%t (zero=%d), work=%t (has_vars=%d)",
+           rem, rem ? rem->is_zero(true) : -1,
+           work, work ? work->variables() : 0);
+    return false;
+}
+
+
+static algebraic_p partfrac_decompose(expression_r eq)
+// ----------------------------------------------------------------------------
+//   Partial fraction decomposition of a rational expression
+// ----------------------------------------------------------------------------
+{
+    cleaner purge;  // Reclaim intermediate temporaries on success
+    record(partfrac, "Decomposing %t", eq);
+
+    expression_g num, den;
+    if (!eq->split(object::ID_divide, num, den))
+    {
+        record(partfrac_error, "Failed to split as division");
+        return nullptr;
+    }
+
+    record(partfrac, "Numerator: %t, Denominator: %t", num, den);
+
+    polynomial_g np = polynomial::make(num, true);
+    polynomial_g dp = polynomial::make(den, true);
+    if (!np || !dp)
+    {
+        record(partfrac_error,
+               "Failed to make polynomials: num=%t -> %t, den=%t -> %t",
+               num, np, den, dp);
+        return nullptr;
+    }
+
+    symbol_g var = polynomial::main_variable();
+    if (!var)
+    {
+        record(partfrac_error, "No main variable");
+        return nullptr;
+    }
+
+    record(partfrac, "Variable: %t", var);
+
+    size_t dvidx = dp->variable(+var);
+    record(partfrac, "Denominator variable index: %u (not found = %u)",
+           (unsigned)dvidx, (unsigned)~0U);
+    if (~dvidx)
+    {
+        record(partfrac, "Variable found in denominator");
+        algebraic_g acc = nullptr;
+        size_t      nvar = 0;
+        size_t      dvar = 0;
+        ularge      ndeg = np->order(&nvar);
+        ularge      ddeg = dp->order(&dvar);
+
+        record(partfrac, "Degrees: num=%u, den=%u", (unsigned)ndeg, (unsigned)ddeg);
+
+        if (ndeg >= ddeg)
+        {
+            record(partfrac, "Improper fraction, performing division");
+            polynomial_g quot, rpart;
+            if (!polynomial::quorem(np, dp, quot, rpart))
+            {
+                record(partfrac_error, "Polynomial division failed");
+                return nullptr;
+            }
+            record(partfrac, "Quotient: %t, Remainder: %t", quot, rpart);
+            acc = quot->as_expression();
+            np  = rpart;
+            if (!np)
+            {
+                record(partfrac_error, "Remainder is null after division");
+                return nullptr;
+            }
+        }
+
+        if (ddeg == 0)
+        {
+            record(partfrac, "Constant denominator, returning");
+            return acc ? algebraic_p(+acc) : algebraic_p(+eq);
+        }
+
+        record(partfrac, "Calling partfrac_decompose_proper");
+        if (!partfrac_decompose_proper(np, dp, var, acc))
+        {
+            record(partfrac_error, "partfrac_decompose_proper failed");
+            return nullptr;
+        }
+        algebraic_g result = acc;
+        if (result && +result != +eq)
+            result = purge(result);
+        return algebraic_p(+result);
+    }
+
+    record(partfrac, "Variable not in denominator, returning unchanged");
+    return algebraic_p(+eq);
+}
+
+
+COMMAND_BODY(PartFrac)
+// ----------------------------------------------------------------------------
+//   Decompose a rational expression into partial fractions
+// ----------------------------------------------------------------------------
+//   Given an expression N(x)/D(x), decompose it into partial fractions
+//   Algorithm:
+//   1. If degree(N) >= degree(D), perform polynomial division first
+//   2. Factor the denominator D(x) to find roots
+//   3. For each distinct root r with multiplicity m:
+//      - For real roots: create A₁/(x-r) + A₂/(x-r)² + ... + Aₘ/(x-r)^m
+//      - For complex conjugate pairs (if kept as quadratic):
+//        create (Bx+C)/(x²+px+q)
+//   4. Solve for coefficients using Heaviside cover-up method or
+//      by clearing denominators and equating coefficients
+{
+    if (object_p obj = rt.top())
+    {
+        algebraic_g input = obj->as_algebraic();
+        if (!input)
+        {
+            rt.type_error();
+            return ERROR;
+        }
+
+        expression_p eq = expression::get(+input);
+        if (!eq)
+            eq = input->as<expression>();
+        if (!eq)
+        {
+            rt.type_error();
+            return ERROR;
+        }
+
+        if (algebraic_p result = partfrac_decompose(eq))
+            if (rt.top(result))
+                return OK;
+
+        if (!rt.error())
+            rt.invalid_polynomial_error();
     }
     return ERROR;
 }

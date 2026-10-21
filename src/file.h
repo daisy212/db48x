@@ -46,7 +46,7 @@ struct file
 //   This class deals with a linked list of files, because DMCP has a really
 //   annoying limit where only one file can be open at a time.
 {
-    enum mode { READING, WRITING, APPEND };
+    enum mode { READING, READING_BINARY, WRITING, APPEND };
     file();
     file(cstring path, mode wrmode);
     file(text_p path, mode wrmode);
@@ -67,6 +67,7 @@ struct file
     char    getchar();
     void    seek(uint offset);
     unicode peek();
+    unicode help_section_char();
     uint    position();
     uint    find(unicode cp);
     uint    find(unicode cp1, unicode cp2);

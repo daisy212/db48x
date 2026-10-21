@@ -91,7 +91,7 @@ const xlib::config xlib::library =
 {
     .menu_help      = "Library",
     .help           = "",
-    .prefix         = L'Ⓛ',
+    .prefix         = U'Ⓛ',
     .type           = ID_xlib,
     .first_menu     = ID_LibraryMenu00,
     .last_menu      = ID_LibraryMenu99,
@@ -221,7 +221,8 @@ object_p xlib::attach() const
         value = xl->value();
         if (!value)
         {
-            rt.invalid_xlib_error();
+            if (!rt.error())
+                rt.invalid_xlib_error();
             return nullptr;
         }
         rt.xlib(idx, value);

@@ -144,14 +144,17 @@ uint stack::draw_stack()
     object_g cached;
     char     buf[16];
 
-    // Invalidate cache if settings changed
-    static uint settingsHash = 0;
-    uint hash = Settings.hash() ^ (interactive ? 0x4242 : 0) ;
-    if (hash != settingsHash)
+    // Invalidate cache if settings changed or temporaries were reclaimed
+    static uint   settingsHash    = 0;
+    static size_t gcclearedAtDraw = 0;
+    uint          hash = Settings.hash() ^ (interactive ? 0x4242 : 0);
+    if (hash != settingsHash || rt.gc_cleared() != gcclearedAtDraw)
     {
+        if (hash != settingsHash)
+            font::clear_cache();
         rt.uncache();
-        font::clear_cache();
         settingsHash = hash;
+        gcclearedAtDraw = rt.gc_cleared();
     }
 
     for (uint level = interactive_base; level < depth; level++)
@@ -209,7 +212,7 @@ uint stack::draw_stack()
                 if (level == 0)
                 {
                     bool     ml = level ? sml : rml;
-                    renderer r(nullptr, ~0U, true, ml);
+                    renderer r(nullptr, SIZE_MAX, true, ml);
                     size_t   len = obj->render(r);
                     utf8     out = r.text();
                     int      key = last_key;
@@ -260,7 +263,7 @@ uint stack::draw_stack()
             else
             {
                 // Text rendering
-                renderer r(nullptr, ~0U, true, ml);
+                renderer r(nullptr, SIZE_MAX, true, ml);
                 len = obj->render(r);
                 out = r.text();
                 gcutf8 saveOut = out;
@@ -343,7 +346,7 @@ uint stack::draw_stack()
 
                 if (dots)
                 {
-                    unicode sep   = L'…';
+                    unicode sep   = U'…';
                     coord   x     = hdrx + 5;
                     coord   split = 200;
                     coord   skip  = font->width(sep) * 3 / 2;

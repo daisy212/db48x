@@ -346,7 +346,21 @@ algebraic_p function::evaluate_noclean(algebraic_r xr, id op, ops_t ops)
     {
         rt.clear_error();
         complex_g z = rectangular::make(x, integer::make(0));
-        result = ops.zop(z);
+        z = ops.zop(z);
+
+        // Complex inverse trigonometric functions return radians, but the
+        // real input expects a result in the current angle mode
+        if (z && ((op >= ID_asin && op <= ID_atan) ||
+                  (op >= ID_asec && op <= ID_acot)))
+        {
+            angle_unit  amode = Settings.AngleMode();
+            algebraic_g re    = z->re();
+            algebraic_g im    = z->im();
+            re = convert_angle(re, ID_Rad, amode, false, false);
+            im = convert_angle(im, ID_Rad, amode, false, false);
+            z = rectangular::make(re, im);
+        }
+        result = z;
     }
 
     return result;
@@ -581,10 +595,14 @@ FUNCTION_BODY(abs)
     case ID_range:
     case ID_drange:
     case ID_prange:
-    case ID_uncertain:
     {
         range_g r = range_p(+x);
         return range::abs(r);
+    }
+    case ID_uncertain:
+    {
+        uncertain_g u = uncertain_p(+x);
+        return uncertain::abs(u);
     }
 
     case ID_unit:
@@ -1106,7 +1124,7 @@ static algebraic_p rnd_or_trnc(algebraic_r value, int digits,
             if (!a)
                 return nullptr;
             obj = +a;
-            if (!rt.append(obj))
+            if (!scr.append(obj))
                 return nullptr;
         }
         return list::make(ty, scr.scratch(), scr.growth());
@@ -1291,7 +1309,7 @@ NFUNCTION_BODY(xroot)
     {
         algebraic_g &y = args[1];
         if (x->is_symbolic() || y->is_symbolic())
-            return expression::make(ID_xroot, args, 2, ID_expression, true);
+            return expression::make(ID_xroot, args, 2);
 
         bool is_int = x->is_integer();
         bool is_neg = false;
@@ -1310,9 +1328,13 @@ NFUNCTION_BODY(xroot)
             is_neg = y->is_negative(false);
             if (is_neg && !is_odd)
             {
-                // Root of a negative number
-                rt.domain_error();
-                return nullptr;
+                // Even root of a negative number: principal complex value
+                if (!Settings.ComplexResults())
+                {
+                    rt.domain_error();
+                    return nullptr;
+                }
+                is_neg = false;
             }
         }
 
@@ -1791,4 +1813,382 @@ NFUNCTION_BODY(PercentTotal)
     algebraic_r y = args[1];
     algebraic_g hundred = integer::make(100);
     return x/y * hundred;
+}
+
+// ============================================================================
+//
+//   Regularised incomplete gamma and beta functions
+//
+// ============================================================================
+//
+//   These two are the primitives from which the chi-square, gamma, beta,
+//   Student and Fisher distributions all follow in closed form, and from
+//   which UTPC, UTPF and UTPT can be built.
+//
+//   A series for the lower incomplete gamma when x < a+1, a continued
+//   fraction for the upper one otherwise, and a continued fraction for the
+//   incomplete beta, all evaluated by the modified method of Lentz. They are
+//   written against the arithmetic of the calculator, so they follow whatever
+//   precision is in force.
+
+static algebraic_g incomplete_epsilon()
+// ----------------------------------------------------------------------------
+//   Convergence threshold for the series and the continued fractions
+// ----------------------------------------------------------------------------
+{
+    return algebraic::epsilon(2);
+}
+
+
+static algebraic_g gamma_p_series(algebraic_r a, algebraic_r x, algebraic_r lga)
+// ----------------------------------------------------------------------------
+//   Series for the regularised lower incomplete gamma, used when x < a+1
+// ----------------------------------------------------------------------------
+{
+    algebraic_g one = integer::make(1);
+    algebraic_g eps = incomplete_epsilon();
+    algebraic_g ap  = a;
+    algebraic_g del = one / ap;
+    algebraic_g sum = del;
+    if (!one || !eps || !del)
+        return nullptr;
+    for (uint i = 0; i < 2000 && !program::interrupted(); i++)
+    {
+        ap  = ap + one;
+        del = del * x / ap;
+        sum = sum + del;
+        if (!ap || !del || !sum)
+            return nullptr;
+        if (smaller_magnitude(del, sum * eps))
+            return sum * exp::run(ln::run(x) * a - x - lga);
+    }
+    rt.precision_loss_error();
+    return nullptr;
+}
+
+
+static algebraic_g gamma_q_fraction(algebraic_r a, algebraic_r x, algebraic_r lga)
+// ----------------------------------------------------------------------------
+//   Continued fraction for the regularised upper incomplete gamma, x >= a+1
+// ----------------------------------------------------------------------------
+{
+    algebraic_g one  = integer::make(1);
+    algebraic_g two  = integer::make(2);
+    algebraic_g tiny = decimal::make(1, -300);
+    algebraic_g eps  = incomplete_epsilon();
+    algebraic_g b    = x + one - a;
+    algebraic_g c    = one / tiny;
+    algebraic_g d    = one / b;
+    algebraic_g h    = d;
+    if (!one || !two || !tiny || !eps || !b || !c || !d)
+        return nullptr;
+    for (uint i = 1; i < 2000 && !program::interrupted(); i++)
+    {
+        algebraic_g ii = integer::make(i);
+        algebraic_g an = -(ii * (ii - a));
+        b = b + two;
+        d = an * d + b;
+        if (!ii || !an || !b || !d)
+            return nullptr;
+        if (smaller_magnitude(d, tiny))
+            d = tiny;
+        c = b + an / c;
+        if (!c)
+            return nullptr;
+        if (smaller_magnitude(c, tiny))
+            c = tiny;
+        d = one / d;
+        algebraic_g del = d * c;
+        h = h * del;
+        if (!d || !del || !h)
+            return nullptr;
+        if (smaller_magnitude(del - one, eps))
+            return h * exp::run(ln::run(x) * a - x - lga);
+    }
+    rt.precision_loss_error();
+    return nullptr;
+}
+
+
+static algebraic_g beta_fraction(algebraic_r a, algebraic_r b, algebraic_r x)
+// ----------------------------------------------------------------------------
+//   Continued fraction for the incomplete beta function
+// ----------------------------------------------------------------------------
+{
+    algebraic_g one  = integer::make(1);
+    algebraic_g tiny = decimal::make(1, -300);
+    algebraic_g eps  = incomplete_epsilon();
+    algebraic_g apb  = a + b;
+    algebraic_g ap1  = a + one;
+    algebraic_g am1  = a - one;
+    algebraic_g c    = one;
+    algebraic_g d    = one - apb * x / ap1;
+    if (!one || !tiny || !eps || !apb || !ap1 || !am1 || !d)
+        return nullptr;
+    if (smaller_magnitude(d, tiny))
+        d = tiny;
+    d = one / d;
+    algebraic_g h = d;
+    if (!d)
+        return nullptr;
+    for (uint m = 1; m < 2000 && !program::interrupted(); m++)
+    {
+        algebraic_g mm = integer::make(m);
+        algebraic_g m2 = mm + mm;
+        if (!mm || !m2)
+            return nullptr;
+
+        // Even step of the recurrence
+        algebraic_g aa = mm * (b - mm) * x / ((am1 + m2) * (a + m2));
+        d = one + aa * d;
+        if (!aa || !d)
+            return nullptr;
+        if (smaller_magnitude(d, tiny))
+            d = tiny;
+        c = one + aa / c;
+        if (!c)
+            return nullptr;
+        if (smaller_magnitude(c, tiny))
+            c = tiny;
+        d = one / d;
+        h = h * d * c;
+        if (!d || !h)
+            return nullptr;
+
+        // Odd step of the recurrence
+        aa = -((a + mm) * (apb + mm) * x / ((a + m2) * (ap1 + m2)));
+        d = one + aa * d;
+        if (!aa || !d)
+            return nullptr;
+        if (smaller_magnitude(d, tiny))
+            d = tiny;
+        c = one + aa / c;
+        if (!c)
+            return nullptr;
+        if (smaller_magnitude(c, tiny))
+            c = tiny;
+        d = one / d;
+        algebraic_g del = d * c;
+        h = h * del;
+        if (!d || !del || !h)
+            return nullptr;
+        if (smaller_magnitude(del - one, eps))
+            return h;
+    }
+    rt.precision_loss_error();
+    return nullptr;
+}
+
+
+NFUNCTION_BODY(GammaP)
+// ----------------------------------------------------------------------------
+//   Regularised lower incomplete gamma, given a then x
+// ----------------------------------------------------------------------------
+{
+    algebraic_g &x = args[0];
+    algebraic_g &a = args[1];
+    if (x->is_symbolic() || a->is_symbolic())
+        return expression::make(ID_GammaP, args, 2, ID_expression, true);
+
+    settings::SaveNumericalResults snr(true);
+    algebraic_g zero = integer::make(0);
+    algebraic_g one  = integer::make(1);
+    if (!zero || !one)
+        return nullptr;
+    if (a->is_negative(false) || a->is_zero(false) || x->is_negative(false))
+    {
+        rt.domain_error();
+        return nullptr;
+    }
+    if (x->is_zero(false))
+        return zero;
+
+    algebraic_g lga = lgamma::run(a);
+    algebraic_g cut = x - (a + one);
+    if (!lga || !cut)
+        return nullptr;
+    if (cut->is_negative(false))
+        return gamma_p_series(a, x, lga);
+    algebraic_g q = gamma_q_fraction(a, x, lga);
+    return q ? one - q : nullptr;
+}
+
+
+NFUNCTION_BODY(BetaI)
+// ----------------------------------------------------------------------------
+//   Regularised incomplete beta, given a then b then x
+// ----------------------------------------------------------------------------
+{
+    algebraic_g &x = args[0];
+    algebraic_g &b = args[1];
+    algebraic_g &a = args[2];
+    if (x->is_symbolic() || a->is_symbolic() || b->is_symbolic())
+        return expression::make(ID_BetaI, args, 3, ID_expression, true);
+
+    settings::SaveNumericalResults snr(true);
+    algebraic_g zero = integer::make(0);
+    algebraic_g one  = integer::make(1);
+    algebraic_g two  = integer::make(2);
+    if (!zero || !one || !two)
+        return nullptr;
+    algebraic_g omx = one - x;
+    if (!omx)
+        return nullptr;
+    if (a->is_negative(false) || a->is_zero(false) ||
+        b->is_negative(false) || b->is_zero(false) ||
+        x->is_negative(false) || omx->is_negative(false))
+    {
+        rt.domain_error();
+        return nullptr;
+    }
+    if (x->is_zero(false))
+        return zero;
+    if (omx->is_zero(false))
+        return one;
+
+    algebraic_g bt = exp::run(lgamma::run(a + b) - lgamma::run(a)
+                              - lgamma::run(b)
+                              + a * ln::run(x) + b * ln::run(omx));
+    algebraic_g cut = x - (a + one) / (a + b + two);
+    if (!bt || !cut)
+        return nullptr;
+
+    // Use the symmetry of the function where the fraction converges slowly
+    if (cut->is_negative(false))
+    {
+        algebraic_g cf = beta_fraction(a, b, x);
+        return cf ? bt * cf / a : nullptr;
+    }
+    algebraic_g cf = beta_fraction(b, a, omx);
+    return cf ? one - bt * cf / b : nullptr;
+}
+
+
+// ============================================================================
+//
+//   Upper tail probabilities
+//
+// ============================================================================
+//
+//   The four functions of the HP50G, built on the two primitives above.
+//   Each returns the probability that the variable exceeds the value given.
+
+NFUNCTION_BODY(UTPC)
+// ----------------------------------------------------------------------------
+//   Upper tail of the chi-square law, given the degrees of freedom then x
+// ----------------------------------------------------------------------------
+{
+    algebraic_g &x = args[0];
+    algebraic_g &n = args[1];
+    if (x->is_symbolic() || n->is_symbolic())
+        return expression::make(ID_UTPC, args, 2, ID_expression, true);
+
+    settings::SaveNumericalResults snr(true);
+    algebraic_g one = integer::make(1);
+    algebraic_g two = integer::make(2);
+    if (!one || !two)
+        return nullptr;
+    if (n->is_negative(false) || n->is_zero(false))
+    {
+        rt.domain_error();
+        return nullptr;
+    }
+    if (x->is_negative(false) || x->is_zero(false))
+        return one;
+    algebraic_g ga[2] = { x / two, n / two };
+    if (!ga[0] || !ga[1])
+        return nullptr;
+    algebraic_g p = GammaP::evaluate(ID_GammaP, ga, 2);
+    return p ? one - p : nullptr;
+}
+
+
+NFUNCTION_BODY(UTPN)
+// ----------------------------------------------------------------------------
+//   Upper tail of the normal law, given the mean, the variance, then x
+// ----------------------------------------------------------------------------
+{
+    algebraic_g &x = args[0];
+    algebraic_g &v = args[1];
+    algebraic_g &m = args[2];
+    if (x->is_symbolic() || v->is_symbolic() || m->is_symbolic())
+        return expression::make(ID_UTPN, args, 3, ID_expression, true);
+
+    settings::SaveNumericalResults snr(true);
+    algebraic_g two  = integer::make(2);
+    algebraic_g half = decimal::make(5, -1);
+    if (!two || !half)
+        return nullptr;
+    if (v->is_negative(false) || v->is_zero(false))
+    {
+        rt.domain_error();
+        return nullptr;
+    }
+    algebraic_g z = (x - m) / sqrt::run(two * v);
+    return z ? half * erfc::run(z) : nullptr;
+}
+
+
+NFUNCTION_BODY(UTPT)
+// ----------------------------------------------------------------------------
+//   Upper tail of the Student law, given the degrees of freedom then t
+// ----------------------------------------------------------------------------
+{
+    algebraic_g &t = args[0];
+    algebraic_g &n = args[1];
+    if (t->is_symbolic() || n->is_symbolic())
+        return expression::make(ID_UTPT, args, 2, ID_expression, true);
+
+    settings::SaveNumericalResults snr(true);
+    algebraic_g one  = integer::make(1);
+    algebraic_g two  = integer::make(2);
+    algebraic_g half = decimal::make(5, -1);
+    if (!one || !two || !half)
+        return nullptr;
+    if (n->is_negative(false) || n->is_zero(false))
+    {
+        rt.domain_error();
+        return nullptr;
+    }
+    algebraic_g ba[3] = { n / (n + t * t), half, n / two };
+    if (!ba[0] || !ba[2])
+        return nullptr;
+    algebraic_g i = BetaI::evaluate(ID_BetaI, ba, 3);
+    if (!i)
+        return nullptr;
+    if (t->is_negative(false))
+        return one - half * i;
+    return half * i;
+}
+
+
+NFUNCTION_BODY(UTPF)
+// ----------------------------------------------------------------------------
+//   Upper tail of the Fisher law, numerator then denominator then x
+// ----------------------------------------------------------------------------
+{
+    algebraic_g &x = args[0];
+    algebraic_g &d = args[1];
+    algebraic_g &n = args[2];
+    if (x->is_symbolic() || n->is_symbolic() || d->is_symbolic())
+        return expression::make(ID_UTPF, args, 3, ID_expression, true);
+
+    settings::SaveNumericalResults snr(true);
+    algebraic_g one = integer::make(1);
+    algebraic_g two = integer::make(2);
+    if (!one || !two)
+        return nullptr;
+    if (n->is_negative(false) || n->is_zero(false) ||
+        d->is_negative(false) || d->is_zero(false))
+    {
+        rt.domain_error();
+        return nullptr;
+    }
+    if (x->is_negative(false) || x->is_zero(false))
+        return one;
+    algebraic_g ba[3] = { n * x / (n * x + d), d / two, n / two };
+    if (!ba[0] || !ba[1] || !ba[2])
+        return nullptr;
+    algebraic_g i = BetaI::evaluate(ID_BetaI, ba, 3);
+    return i ? one - i : nullptr;
 }

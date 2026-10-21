@@ -205,7 +205,7 @@ struct object
         insert_fn       insert;         // Insert object in editor
         menu_fn         menu;           // Build menu entries
         menu_marker_fn  menu_marker;    // Show marker
-        uint            arity;          // Number of input arguments
+        int             arity;          // Number of input arguments (<0 = max)
         uint            precedence;     // Precedence in expressions
         uint            symbolic;       // Which arguments are symbolic
     };
@@ -448,8 +448,8 @@ struct object
         return is_monochrome() ? grob_p(this) : nullptr;
     }
 
-    uint32_t as_uint32(uint32_t def, bool err) const;
-    int32_t  as_int32 (int32_t  def, bool err)  const;
+    uint32_t as_uint32(uint32_t def, bool err, bool integral = false) const;
+    int32_t  as_int32 (int32_t  def, bool err, bool integral = false) const;
     uint64_t as_uint64(uint64_t def, bool err) const;
     int64_t  as_int64 (int64_t  def, bool err)  const;
     // ------------------------------------------------------------------------
@@ -489,7 +489,8 @@ struct object
                           size_t &size,
                           int     precedence = 0,
                           unicode separator  = 0,
-                          bool    truenames  = false);
+                          bool    truenames  = false,
+                          bool    quoted     = false);
     // ------------------------------------------------------------------------
     //  Try parsing the object as a top-level temporary
     // ------------------------------------------------------------------------
@@ -872,12 +873,24 @@ struct object
     }
 
 
-    uint arity() const
+    uint arity() const          { return arity(type()); }
+    static uint arity(id ty)
     // ------------------------------------------------------------------------
     //   Return the arity for arithmetic operators
     // ------------------------------------------------------------------------
     {
-        return ops().arity;
+        int a = handler[ty].arity;
+        return uint(a < 0 ? ~a : a);
+    }
+
+
+    bool variable_arity() const { return variable_arity(type()); }
+    static bool variable_arity(id ty)
+    // ------------------------------------------------------------------------
+    //   Return true if object has variable arity
+    // ------------------------------------------------------------------------
+    {
+        return handler[ty].arity < 0;
     }
 
 

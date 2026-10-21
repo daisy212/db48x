@@ -87,22 +87,22 @@ struct array : list
 {
     array(id type, gcbytes bytes, size_t len): list(type, bytes, len) {}
 
-    static array_g map(algebraic_fn fn, array_r x, size_t recurse = ~0U)
+    static array_g map(algebraic_fn fn, array_r x, size_t recurse = SIZE_MAX)
     {
         return x->map(fn, recurse);
     }
 
-    array_p map(algebraic_fn fn, size_t recurse = ~0U) const
+    array_p map(algebraic_fn fn, size_t recurse = SIZE_MAX) const
     {
         return array_p(list::map(fn, recurse));
     }
 
-    array_p map(arithmetic_fn fn, algebraic_r y, size_t recurse = ~0U) const
+    array_p map(arithmetic_fn fn, algebraic_r y, size_t recurse = SIZE_MAX) const
     {
         return array_p(list::map(fn, y, recurse));
     }
 
-    array_p map(algebraic_r x, arithmetic_fn fn, size_t recurse = ~0U) const
+    array_p map(algebraic_r x, arithmetic_fn fn, size_t recurse = SIZE_MAX) const
     {
         return array_p(list::map(x, fn, recurse));
     }
@@ -132,6 +132,7 @@ struct array : list
                                 void *data);
     static array_p build(size_t rows, size_t columns,
                          item_fn items, void *data = nullptr);
+    static array_p identity(size_t n);
 
     algebraic_p         determinant() const;
     algebraic_p         norm_square() const;

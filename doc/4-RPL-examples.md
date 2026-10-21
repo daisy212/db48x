@@ -294,7 +294,8 @@ is no variable by that name, this will be interpreted as the constant `ⒸR`.
 Setting the `ExplicitConstants` flag disables that automatic lookup of
 constants. Alternatively, you can use `Ⓥ` as a prefix to ensure that the
 following name is interpreted as a variable name. For example, while `Clone` is
-a built-in command, you can use a global variable named `ⓋClone`.
+a built-in command, you can use a global variable named `ⓋClone`. In quotes,
+`'R'` will always reference the variable name.
 
 
 

@@ -170,17 +170,17 @@ uint to_date(object_p dtobj, dt_t &dt, tm_t &tm, bool error)
 }
 
 
-algebraic_p to_days(object_p dobj, bool error)
+algebraic_p to_days(object_p dp, bool error)
 // ----------------------------------------------------------------------------
 //   Return the value interpreted as a number of days
 // ----------------------------------------------------------------------------
 {
-    if (!dobj)
+    if (!dp)
         return nullptr;
-    dobj = object::strip(dobj);
+    object_g dobj = object::strip(dp);
 
     algebraic_p dval = nullptr;
-    if (unit_g u = unit::get(dobj))
+    if (unit_g u = unit::get(+dobj))
     {
         unit_g day = unit::make(integer::make(1), +symbol::make("d"));
         if (day->convert(u, false))
@@ -204,6 +204,11 @@ algebraic_p julian_day_number(const dt_t &dt, const tm_t &tm)
     ularge csecs = (tm.hour * 3600 + tm.min * 60 + tm.sec) * 100 + tm.csec;
     ularge jval = julian_day_number(dt.day, dt.month, dt.year);
     algebraic_g jdn = integer::make(jval);
+    // Julian day numbers are referenced to NOON (a Julian date rolls over at
+    // 12:00 UT), whereas csecs is counted from midnight. Shift by -1/2 day so
+    // the returned value is the astronomical Julian Date (JD).
+    algebraic_g half = +fraction::make(integer::make(1), +integer::make(2));
+    jdn = jdn - half;
     if (csecs)
     {
         algebraic_g frac = +fraction::make(integer::make(csecs),
@@ -262,6 +267,10 @@ algebraic_p date_from_julian_day(object_p jdn, bool error)
 
     if (algebraic_g jval = jdn->as_real())
     {
+        // Undo the -1/2 day noon offset applied by julian_day_number() before
+        // splitting into the noon-based integer day and the time-of-day part.
+        algebraic_g half = +fraction::make(integer::make(1), +integer::make(2));
+        jval = jval + half;
         large jdn = jval->as_int64(0, error);
 
         enum
@@ -324,14 +333,16 @@ algebraic_p date_from_julian_day(object_p jdn, bool error)
 }
 
 
-algebraic_p days_between_dates(object_p date1, object_p date2, bool error)
+algebraic_p days_between_dates(object_p d1p, object_p d2p, bool error)
 // ----------------------------------------------------------------------------
 //   Compute the number of days between two dates
 // ----------------------------------------------------------------------------
 {
+    object_g date1 = d1p;
+    object_g date2 = d2p;
     dt_t dt1, dt2;
     tm_t tm1{}, tm2{};
-    if (to_date(date1, dt1, tm1, error) && to_date(date2, dt2, tm2, error))
+    if (to_date(+date1, dt1, tm1, error) && to_date(+date2, dt2, tm2, error))
     {
         algebraic_g day1 = julian_day_number(dt1, tm1);
         algebraic_g day2 = julian_day_number(dt2, tm2);
@@ -343,16 +354,17 @@ algebraic_p days_between_dates(object_p date1, object_p date2, bool error)
 }
 
 
-static algebraic_p days_after(object_p date, object_p days, bool error, int s)
+static algebraic_p days_after(object_p dp, object_p dy, bool error, int s)
 // ----------------------------------------------------------------------------
 //   Compute the number of days after a given date
 // ----------------------------------------------------------------------------
 {
-    if (algebraic_g num = to_days(days, error))
+    object_g date = dp;
+    if (algebraic_g num = to_days(dy, error))
     {
         dt_t dt;
         tm_t tm{};
-        if (to_date(date, dt, tm, error))
+        if (to_date(+date, dt, tm, error))
         {
             algebraic_g jdn = julian_day_number(dt, tm);
             jdn = s > 0 ? jdn + num : jdn - num;
@@ -906,15 +918,15 @@ COMMAND_BODY(DateAdd)
 //   Add a date to a number of days
 // ----------------------------------------------------------------------------
 {
-    if (object_p d1 = rt.stack(1))
+    if (object_g d1 = rt.stack(1))
     {
-        if (object_p d2 = rt.stack(0))
+        if (object_g d2 = rt.stack(0))
         {
-            if (algebraic_p daf = days_after(d1, d2))
+            if (algebraic_p daf = days_after(+d1, +d2))
                 if (rt.drop() && rt.top(daf))
                     return OK;
             rt.clear_error();
-            if (algebraic_p daf = days_after(d2, d1))
+            if (algebraic_p daf = days_after(+d2, +d1))
                 if (rt.drop() && rt.top(daf))
                     return OK;
         }

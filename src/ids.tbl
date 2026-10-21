@@ -388,6 +388,12 @@ CMD(log2)
 CMD(exp2)       ALIAS(exp2, "alog2")
 CMD(erf)
 CMD(erfc)
+CMD(GammaP)
+CMD(BetaI)
+CMD(UTPC)
+CMD(UTPN)
+CMD(UTPT)
+CMD(UTPF)
 NAMED(tgamma, "Γ")              ALIAS(tgamma, "Gamma")
 NAMED(lgamma, "lnΓ")            ALIAS(lgamma, "LnGamma")
 NAMED(fact, "x!")               ALIAS(fact, "factorial") ALIAS(fact, "!")
@@ -630,6 +636,7 @@ NAMED(MatchUp,   "↑Match")
 NAMED(MatchDown, "↓Match")
 CMD(Expand)                     ALIAS(Expand, "Expan")
 CMD(Collect)
+CMD(PartFrac)                   ALIAS(PartFrac, "PartialFractions")
 CMD(FoldConstants)
 CMD(ReorderTerms)
 CMD(Simplify)
@@ -713,7 +720,7 @@ OP(ToGrads,     "→Grads")               ALIAS(ToGrads,   "→Grad")
 OP(ToPiRadians, "→PiRadians")           ALIAS(ToPiRadians, "→πr")
 
 // Ranges
-NAMED(FromRange,      "Range→")
+NAMED(FromRange,      "Range→")         ALIAS(FromRange,   "RangeToReal")
 NAMED(ToRange,        "→Range")         ALIAS(ToRange,     "→Interval")
 NAMED(ToDeltaRange,   "→∆Range")
 NAMED(ToPercentRange, "→%Range")
@@ -737,6 +744,13 @@ OP(SetTime, "→Time")
 CMD(Wait)
 CMD(Bytes)
 CMD(ScreenCapture)
+CMD(KeyEval)
+CMD(KeyCode)
+
+#ifdef SIMULATOR
+CMD(SelfTest)                           ALIAS(SelfTest, "AutoTest")
+CMD(SelfTests)                          ALIAS(SelfTests, "AutoTests")
+#endif // SIMULATOR
 
 #ifdef HAS_CHUCK
 OP(ChuckNorris, "Chuck")
@@ -848,6 +862,11 @@ CMD(StepOut)
 CMD(MultipleSteps)
 CMD(Continue)                           ALIAS(Continue, "cont")
 CMD(Kill)
+
+// DB48x debugging
+CMD(FlightRecorderConfigure)
+CMD(FlightRecorderDump)                 ALIAS(FlightRecorderDump, "WSLog")
+CMD(FlightRecorderDumpSome)
 
 // Input and prompting
 CMD(Input)
@@ -1083,6 +1102,7 @@ FLAG(LaxArrayResizing,          StrictArrayResizing)
 FLAG(EchelonFormKeepLastColumn, EchelonFormReduceLastColumn)
 FLAG(ExplicitConstants,         AutomaticConstants)
 FLAG(ExplicitXLibs,             AutomaticXLibs)
+FLAG(HideAmbiguousNames,        ShowAmbiguousNames)
 
 SETTING_BITS(ListRecursionDepth, uint, 16, 0U, 65535U,    1U)
 
@@ -1175,6 +1195,9 @@ SETTING(MaxFactorIterations,  1024U, 16777216U,       10000U)
 SETTING(MaxPolynomialDegree,     5U, 100000U,           100U)
 SETTING(MaxLaguerreIterations,   5U,   1000U,            80U)
 SETTING(MaxRootDivisor,          5U,100000000U,     1000000U)
+SETTING(MaxNameChainLength,      1U,    65535U,          32U)
+SETTING(MaxCallRecursion,        1U,100000000U,        1024U)
+SETTING(MaxStackDepth,           8U,100000000U,        2048U)
 
 SETTING_ENUM(SingleRowMenus,    nullptr,        MenuAppearance)
 SETTING_ENUM(FlatMenus,         nullptr,        MenuAppearance)

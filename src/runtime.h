@@ -351,7 +351,8 @@ struct runtime
     bool     cache(bool level0, object_p key, object_p value);
     void     uncache(object_p key, size_t sz);
     void     uncache(object_p key)      { uncache(key, 1); }
-    void     uncache()                  { uncache(nullptr, ~0UL); }
+    void     uncache()                  { uncache(nullptr, SIZE_MAX); }
+    size_t   gc_cleared() const         { return GCCleared; }
 
 
     // ========================================================================
@@ -792,6 +793,12 @@ struct runtime
         return Stack;
     }
 
+    typedef int (*sort_fn)(object_p, object_p);
+    void sort(size_t count, sort_fn cmp);
+    // ------------------------------------------------------------------------
+    //   GC-aware sort of the bottom 'count' stack entries
+    // ------------------------------------------------------------------------
+
 
 
     // ========================================================================
@@ -1049,6 +1056,14 @@ struct runtime
         return ErrorSave;
     }
 
+    void error_message(utf8 message)
+    // ------------------------------------------------------------------------
+    //   Restore the error message saved for errm
+    // ------------------------------------------------------------------------
+    {
+        ErrorSave = message;
+    }
+
     runtime &source(utf8 spos, size_t len = 0)
     // ------------------------------------------------------------------------
     //   Set the source location for the current error
@@ -1206,6 +1221,14 @@ using object_r  = const object_g &;
     GCP_EXISTING(T)
 
 
+template <typename T>
+inline uintptr_t _recorder_arg(const gcp<T> &p)
+{
+    return (uintptr_t) p.Safe();
+}
+
+
+
 // ============================================================================
 //
 //   Stack buffer - temporary value arrays backed by the RPL stack
@@ -1320,7 +1343,7 @@ struct scribble
 //   Temporary area using the scratchpad
 // ----------------------------------------------------------------------------
 {
-    scribble(): allocated(rt.allocated())
+    scribble(): allocated(rt.allocated()), current(allocated)
     {
     }
     ~scribble()
@@ -1344,9 +1367,42 @@ struct scribble
     {
         return rt.scratchpad() - rt.allocated() + allocated;
     }
+    inline void adjust()
+    {
+        size_t allocated = rt.allocated();
+        if (current < allocated)
+        {
+            record(runtime_error,
+                   "Scribble purged %lu bytes", allocated - current);
+            rt.free(allocated - current);
+        }
+    }
+
+    template <typename ...Items>
+    inline byte *append(Items... items)
+    {
+        adjust();
+        byte *result = rt.append(items...);
+        current      = rt.allocated();
+        return result;
+    }
+    inline byte *append_expression(object_p obj)
+    {
+        adjust();
+        byte *result = rt.append_expression(obj);
+        current      = rt.allocated();
+        return result;
+    }
+    inline byte *allocate(size_t sz)
+    {
+        adjust();
+        byte *result = rt.allocate(sz);
+        current      = rt.allocated();
+        return result;
+    }
 
 private:
-    size_t  allocated;
+    size_t  allocated, current;
 };
 
 

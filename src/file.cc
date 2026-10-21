@@ -35,6 +35,7 @@
 #include "utf8.h"
 
 #include <unistd.h>
+#include <string.h>
 
 
 
@@ -137,7 +138,7 @@ void file::open(cstring path, mode wrmode)
 //    Open a file for reading
 // ----------------------------------------------------------------------------
 {
-    bool reading = wrmode == READING;
+    bool reading = wrmode == READING || wrmode == READING_BINARY;
     bool append  = wrmode == APPEND;
     writing      = append || wrmode == WRITING;
     previous     = current;
@@ -147,7 +148,10 @@ void file::open(cstring path, mode wrmode)
     name = path;
 
 #if SIMULATOR
-    data = fopen(path, reading ? "r" : append ? "a" : "w");
+    if (wrmode == READING_BINARY)
+        data = fopen(path, "rb");
+    else
+        data = fopen(path, reading ? "rb" : append ? "ab" : "wb");
     if (!data)
     {
         record(file_error, "Error %s opening %s", strerror(errno), path);
@@ -273,7 +277,11 @@ char file::getchar()
 //   Read char code at offset
 // ----------------------------------------------------------------------------
 {
-    int c = valid() ? fgetc(data) : 0;
+    int c = 0;
+    do
+    {
+        c = valid() ? fgetc(data) : EOF;
+    } while (c == '\r');
     if (c == EOF)
         c = 0;
     return c;
@@ -285,7 +293,11 @@ unicode file::get()
 //   Read UTF8 code at offset
 // ----------------------------------------------------------------------------
 {
-    unicode code = valid() ? fgetc(data) : unicode(EOF);
+    unicode code = 0;
+    do
+    {
+        code = valid() ? fgetc(data) : unicode(EOF);
+    } while (code == '\r');
     if (code == unicode(EOF))
         return 0;
 
@@ -294,11 +306,11 @@ unicode file::get()
         uint    offs = ftell(data);
         unicode next = valid() ? fgetc(data) : unicode(EOF);
         if (code == '<' && next == '<')
-            return L'«';
+            return U'«';
         else if (code == '>' && next == '>')
-            return L'»';
+            return U'»';
         else if (code == '-' && next == '>')
-            return L'→';
+            return U'→';
         seek(offs);
     }
 
@@ -352,7 +364,9 @@ uint file::find(unicode cp1, unicode cp2)
     {
         off = ftell(data);
         c   = get();
-    } while (c && c != cp1 && (c != cp2 || (in = !in)));
+        if (c == cp2)
+            in = !in;
+    } while (c && (in || c != cp1));
     return off;
 }
 
@@ -363,17 +377,53 @@ uint file::rfind(unicode  cp)
 // ----------------------------------------------------------------------------
 //    Return position right before code point, position file right after it
 {
-    uint    off = ftell(data);
-    unicode c;
+    uint    from = ftell(data);
+    uint    off  = from;
+    unicode c    = 0;
     do
     {
         if (off == 0)
             break;
-        fseek(data, --off, SEEK_SET);
-        c = get();
+        off--;
+        fseek(data, off, SEEK_SET);
+        int raw = valid() ? fgetc(data) : EOF;
+        c = raw == EOF ? 0 : unicode(raw);
+    } while (c != cp);
+
+    if (c == '\n' && off)
+    {
+        fseek(data, off - 1, SEEK_SET);
+        if (valid() && fgetc(data) == '\r')
+            off--;
     }
-    while (c != cp);
+
+    record(file, "rfind %+c from=%u off=%u", cp, from, off);
+
+    seek(off);
+    get();
     return off;
+}
+
+
+unicode file::help_section_char()
+// ----------------------------------------------------------------------------
+//    Character starting the next line for help UP section scan (raw bytes)
+// ----------------------------------------------------------------------------
+{
+    uint pos = position();
+    int  raw = valid() ? fgetc(data) : EOF;
+    if (raw == '\r')
+    {
+        fseek(data, pos + 1, SEEK_SET);
+        raw = valid() ? fgetc(data) : EOF;
+    }
+    if (raw == '\n')
+    {
+        seek(pos);
+        return '\n';
+    }
+    seek(pos);
+    return raw == EOF ? 0 : unicode(raw);
 }
 
 
@@ -383,17 +433,30 @@ uint file::rfind(unicode  cp1, unicode cp2)
 // ----------------------------------------------------------------------------
 //    Return position right before code point, position file right after it
 {
-    uint    off = ftell(data);
-    unicode c;
-    bool    in = false;
+    uint    from = ftell(data);
+    uint    off  = from;
+    unicode c    = 0;
+    bool    in   = false;
     do
     {
         if (off == 0)
             break;
-        fseek(data, --off, SEEK_SET);
-        c = get();
+        off--;
+        fseek(data, off, SEEK_SET);
+        int raw = valid() ? fgetc(data) : EOF;
+        c = raw == EOF ? 0 : unicode(raw);
+        if (c == '\r')
+            continue;
+        if (c == cp2)
+            in = !in;
     }
-    while (c != cp1 && (c != cp2 || (in = !in)));
+    while (c && (in || c != cp1));
+
+    record(file, "rfind %+c%+c from=%u off=%u in=%u",
+           cp1, cp2, from, off, uint(in));
+
+    seek(off);
+    get();
     return off;
 }
 

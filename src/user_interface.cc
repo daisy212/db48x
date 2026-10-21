@@ -72,8 +72,9 @@ using std::min;
 RECORDER(user_interface,16, "ui processing");
 RECORDER(text_editor,   16, "Text editor");
 RECORDER(menus,         16, "Menu operations");
-RECORDER(help,          16, "On-line help");
+RECORDER(help,         256, "On-line help");
 RECORDER(help_search,   16, "On-line help topic search");
+RECORDER(help_trace,    16, "On-line help scroll trace");
 RECORDER(tests_ui,      16, "Test interaction with user interface");
 RECORDER(shifts,        16, "Shift logic (including transient alpha)");
 RECORDER(keymap_warning, 8, "Warnings about invalid keymaps");
@@ -156,6 +157,9 @@ user_interface::user_interface()
       longpress(false),
       blink(false),
       follow(false),
+      skipTopicSync(0),
+      helpUpTarget(0),
+      helpUpOffset(0),
       force(false),
       dirtyMenu(false),
       dirtyStack(false),
@@ -217,7 +221,7 @@ void user_interface::insert(unicode c, modes m, bool autoclose)
     case ':':  if (m != TEXT)   closing = ':';  m = DIRECT;             break;
     case '"':                   closing = '"';  m = TEXT;               break;
     case '\'':                  closing = '\''; m = ALGEBRAIC;          break;
-    case L'«':                  closing = L'»'; m = PROGRAM;            break;
+    case U'«':                  closing = U'»'; m = PROGRAM;            break;
     case '_':                                   m = UNIT;               break;
     case '\n': edRows = 0;                    break; // Recompute rows
     }
@@ -604,6 +608,8 @@ void user_interface::clear_help()
     image       = nullptr;
     impos       = 0;
     topic       = 0;
+    skipTopicSync = 0;
+    helpUpTarget = 0;
     follow      = false;
     last        = 0;
     longpress   = false;
@@ -957,8 +963,8 @@ void user_interface::update_mode()
             case ']':       vecs--;                         break;
             case '(':       parn++;                         break;
             case ')':       parn--;                         break;
-            case L'«':      progs++;                        break;
-            case L'»':      progs--;                        break;
+            case U'«':      progs++;                        break;
+            case U'»':      progs--;                        break;
             case '_':       unit = true;                    break;
             case '#':       based++;
                             hnum = inum = syms = 0;
@@ -1134,7 +1140,7 @@ bool user_interface::at_end_of_number(bool want_polar)
         if (~lastnum)
         {
             // An exponent must be followed by numbers
-            if (code == L'⁳' || code == 'E' || code == 'e')
+            if (code == U'⁳' || code == 'E' || code == 'e')
             {
                 hadexp = true;
                 inexp = true;
@@ -1158,7 +1164,7 @@ bool user_interface::at_end_of_number(bool want_polar)
                 }
                 continue;
             }
-            if (code == settings::SPACE_DEFAULT || code == L'’' || code == '_')
+            if (code == settings::SPACE_DEFAULT || code == U'’' || code == '_')
                 continue;
         }
 
@@ -1849,7 +1855,7 @@ bool user_interface::draw_menus()
                         {
                             mark = settings::MARK;
                         }
-                        if (mark == L'░')
+                        if (mark == U'░')
                         {
                             color = Settings.UnimplementedForeground();
                         }
@@ -1865,7 +1871,7 @@ bool user_interface::draw_menus()
                             mcw -= mkw;
                             if (alignLeft)
                                 trect.x1 += mkw;
-                            else if (marker != L'◥')
+                            else if (marker != U'◥')
                                 trect.x2 -= mkw;
                         }
                     }
@@ -1889,7 +1895,7 @@ bool user_interface::draw_menus()
                 if (marker)
                 {
                     Screen.clip(mrect);
-                    bool dossier = marker == L'◥';
+                    bool dossier = marker == U'◥';
                     if (dossier)
                     {
                         pattern fldcol = Settings.FolderCornerForeground();
@@ -1945,6 +1951,29 @@ bool user_interface::draw_header()
         return false;
 
     bool changed = force;
+
+    // Redraw the whole header when a setting that changes it was modified:
+    // otherwise, hiding the time leaves the old time on screen, since nothing
+    // else triggers a redraw, and the other settings wait for the next minute
+    static uint lastStyle = ~0U;
+    uint style = (uint(Settings.ShowDate())       << 0)
+               | (uint(Settings.ShowTime())       << 1)
+               | (uint(Settings.ShowSeconds())    << 2)
+               | (uint(Settings.ShowMonthName())  << 3)
+               | (uint(Settings.TwoDigitYear())   << 4)
+               | (uint(Settings.ShowDayOfWeek())  << 5)
+               | (uint(Settings.YearFirst())      << 6)
+               | (uint(Settings.MonthBeforeDay()) << 7)
+               | (uint(Settings.Time24H())        << 8)
+               | (uint(Settings.ShowVoltage())    << 9)
+               | (uint(Settings.DateSeparator())  << 16);
+    bool restyle = style != lastStyle;
+    if (restyle)
+    {
+        lastStyle = style;
+        changed = true;
+    }
+
     if (!day || Settings.ShowDate() || Settings.ShowTime())
     {
         dt_t dt;
@@ -2031,6 +2060,7 @@ bool user_interface::draw_header()
                 grapher g(LCD_W, LCD_H / 3, fid,
                           grob::pattern::black, grob::pattern::white,
                           true, true, true);
+                save<bool> su(symbol::unambiguous, true);
                 if (grob_p gr = eval->graph(g))
                 {
                     pattern       fg = Settings.HeaderForeground();
@@ -2061,6 +2091,9 @@ bool user_interface::draw_header()
         }
 
         coord  x  = 1;
+        if (restyle)
+            Screen.fill(0, 0, LCD_W - 1, hdr_bottom,
+                        pattern(Settings.HeaderBackground()));
         Screen.fill(header, pattern(Settings.HeaderBackground()));
 
         // Read the real-time clock
@@ -2125,6 +2158,18 @@ bool user_interface::draw_header()
             stackTop = h;
             dirtyStack = true;
         }
+
+        if (restyle)
+        {
+            // The battery and the annunciators move when the voltage is
+            // shown or hidden: redraw them at once
+            bool sf = force;
+            force = true;
+            draw_battery();
+            draw_annunciators();
+            force = sf;
+            draw_dirty(0, 0, LCD_W - 1, hdr_bottom);
+        }
     }
     return changed;
 }
@@ -2133,6 +2178,8 @@ bool user_interface::draw_header()
 static const uint ann_width   = 15;
 static const uint ann_height  = 12;
 static const uint alpha_width = 30;
+
+// U'…' (char32_t) for Unicode codepoints; portable on all platforms.
 
 bool user_interface::draw_battery(bool now)
 // ----------------------------------------------------------------------------
@@ -2402,7 +2449,7 @@ bool user_interface::draw_busy()
 //   Draw the default busy cursor
 // ----------------------------------------------------------------------------
 {
-    return draw_busy(L'▶', Settings.RunningIconForeground());
+    return draw_busy(U'▶', Settings.RunningIconForeground());
 }
 
 
@@ -2952,7 +2999,7 @@ bool user_interface::draw_stepping_object()
         renderer r(nullptr, 40);
         obj->render(r);
         draw_user_command(r.text(), r.size());
-        draw_busy(L'♦', Settings.HaltedIconForeground());
+        draw_busy(U'♦', Settings.HaltedIconForeground());
         return true;
     }
     return false;
@@ -2987,7 +3034,7 @@ bool user_interface::draw_error()
         {
             text_p cmdr = cmd->as_text();
             size_t sz   = 0;
-            utf8   cmdt = cmdr->value(&sz);
+            utf8   cmdt = cmdr ? cmdr->value(&sz) : utf8("Memory Full");
             coord  x    = Screen.text(r.x1, r.y1, cmdt, sz, ErrorFont, fg);
             Screen.text(x, r.y1, utf8(" error:"), ErrorFont);
         }
@@ -3106,6 +3153,7 @@ bool user_interface::draw_object(object_p objp, uint top, uint bottom)
     grapher g(LCD_W, bottom - top, fid,
               grob::pattern::black, grob::pattern::white,
               true);
+    settings::SaveShowAmbiguousNames san(false);
     g.reduce_font();
     grob_g graph = nullptr;
     object_g obj = objp;
@@ -3158,6 +3206,12 @@ bool user_interface::transient_object(object_p obj)
 }
 
 
+static void help_log_line_endings(cstring path);
+static void help_log_link_at(file &hf, uint pos, cstring label);
+static void help_log_raw(cstring path, uint pos, uint before, uint after,
+                         cstring label);
+
+
 void user_interface::load_help(utf8 topic, size_t len)
 // ----------------------------------------------------------------------------
 //   Find the help message associated with the topic
@@ -3171,6 +3225,7 @@ void user_interface::load_help(utf8 topic, size_t len)
     follow    = false;
     dirtyHelp = true;
     dirtyMenu = true;
+    helpUpTarget = 0;
 
     if (!memcmp(topic, "http", 4))
     {
@@ -3202,10 +3257,11 @@ void user_interface::load_help(utf8 topic, size_t len)
     uint       topicpos = 0;
     bool       found    = false;
     uint       idxpos   = 0;
+    char       first    = 0;
 
     // Check if the index exists. If so, scan it
     {
-        file index(HELPINDEX_NAME, file::READING);
+        file index(HELPINDEX_NAME, file::READING_BINARY);
         if (index.valid())
         {
             for (char c = index.getchar(); !found && c; c = index.getchar())
@@ -3255,10 +3311,12 @@ void user_interface::load_help(utf8 topic, size_t len)
             // Not found in index, quit
             if (!found)
                 goto notfound;
-            if (!isvar)
-                found = false;
-            else if (found)
+            else
+                // Index header match is authoritative; rescanning can leave
+                // the file pointer mid-section on defective platforms (Lose).
                 topicpos = idxpos;
+            record(help, "index match %+.*s idxpos=%u",
+                   int(len), topic, idxpos);
         }
     }
 
@@ -3266,17 +3324,27 @@ void user_interface::load_help(utf8 topic, size_t len)
     // Need to have the help file open here
     if (!helpfile.valid())
     {
-        helpfile.open(HELPFILE_NAME, file::READING);
+        helpfile.open(HELPFILE_NAME, file::READING_BINARY);
         if (!helpfile.valid())
         {
             help = -1u;
             line = 0;
             return;
         }
+        help_log_line_endings(HELPFILE_NAME);
     }
 
-    helpfile.seek(idxpos);
-    for (char c = helpfile.getchar(); !found && c; c = helpfile.getchar())
+    if (found)
+    {
+        first = 0;
+    }
+    else
+    {
+        helpfile.seek(idxpos);
+        first = helpfile.getchar();
+    }
+
+    for (char c = first; !found && c; c = helpfile.getchar())
     {
         // Reset topic after newline
         if (hadcr)
@@ -3331,8 +3399,10 @@ void user_interface::load_help(utf8 topic, size_t len)
     {
         help = topicpos;
         line = 0;
-        record(help, "Found topic %s at position %u level %u",
-               topic, helpfile.position(), level);
+        helpfile.seek(help);
+        record(help, "Found topic %.*s at position %u level %u",
+               int(len), topic, help, level);
+        help_log_raw(HELPFILE_NAME, help, 1, 40, "load_help");
 
         if (topicsHistory >= NUM_TOPICS)
         {
@@ -3918,10 +3988,10 @@ void user_interface::draw_help_access_paths(id cmd,
             {
                 unicode cp = utf8_codepoint(text);
                 text       = utf8_next(text);
-                if (cp == L'🟨' || cp == L'🟦')
+                if (cp == U'🟨' || cp == U'🟦')
                 {
-                    bool          ls     = cp == L'🟨';
-                    const byte   *source = cp == L'🟦' ? ann_right : ann_left;
+                    bool          ls     = cp == U'🟨';
+                    const byte   *source = cp == U'🟦' ? ann_right : ann_left;
                     pixword      *sw     = (pixword *) source;
                     grob::surface s(sw, ann_width, ann_height, 16);
                     pattern       fg    = ls ? Settings.LeftShiftForeground()
@@ -3950,13 +4020,147 @@ void user_interface::draw_help_access_paths(id cmd,
 }
 
 
+static void help_log_line_endings(cstring path)
+// ----------------------------------------------------------------------------
+//   Count raw CR/LF bytes in the help file (binary scan)
+// ----------------------------------------------------------------------------
+{
+    FILE *f = fopen(path, "rb");
+    if (!f)
+    {
+        record(help, "help line endings: cannot open %+s", path);
+        return;
+    }
+
+    uint cr = 0, lf = 0, crlf = 0;
+    uint size = 0;
+    int  prev = -1;
+    int  c;
+    while ((c = fgetc(f)) != EOF)
+    {
+        size++;
+        if (c == '\r')
+            cr++;
+        if (c == '\n')
+            lf++;
+        if (c == '\n' && prev == '\r')
+            crlf++;
+        prev = c;
+    }
+    fclose(f);
+    record(help, "help line endings %+s: size=%u CR=%u LF=%u CRLF=%u",
+           path, size, cr, lf, crlf);
+}
+
+
+static void help_log_raw(cstring path, uint pos, uint before, uint after,
+                         cstring label)
+// ----------------------------------------------------------------------------
+//   Log raw bytes around a file offset (binary read, independent of helpfile)
+// ----------------------------------------------------------------------------
+{
+    FILE *f = fopen(path, "rb");
+    if (!f)
+    {
+        record(help, "%+s pos=%u (cannot open %+s)", label, pos, path);
+        return;
+    }
+
+    uint start = pos >= before ? pos - before : 0;
+    if (fseek(f, long(start), SEEK_SET))
+    {
+        fclose(f);
+        record(help, "%+s pos=%u (seek fail start=%u)", label, pos, start);
+        return;
+    }
+
+    char show[48];
+    char hex[4 * 12 + 1];
+    uint n   = 0;
+    uint hn  = 0;
+    uint mark = pos - start;
+    while (n < before + after && n < sizeof(show) - 1)
+    {
+        int c = fgetc(f);
+        if (c == EOF)
+            break;
+        show[n] = (c >= 32 && c < 127) ? char(c) : '.';
+        if (n >= mark - 1 && hn / 3 < 12)
+            hn += snprintf(hex + hn, sizeof(hex) - hn, "%02x ", c);
+        n++;
+    }
+    show[n] = 0;
+    if (hn && hex[hn - 1] == ' ')
+        hex[hn - 1] = 0;
+    record(help, "%+s pos=%u text=[%+s] hex=[%+s]", label, pos, show, hex);
+    fclose(f);
+}
+
+
+static void help_log_link_at(file &hf, uint pos, cstring label)
+// ----------------------------------------------------------------------------
+//   Log markdown link text and anchor at a file position after '['
+// ----------------------------------------------------------------------------
+{
+    if (!pos)
+    {
+        record(help, "%+s pos=%u (invalid)", label, pos);
+        return;
+    }
+
+    help_log_raw(hf.filename(), pos, 4, 32, label);
+
+    if (!hf.valid())
+        return;
+
+    hf.seek(pos - 1);
+    if (hf.getchar() != '[')
+    {
+        record(help, "%+s pos=%u (no '[' after seek)", label, pos);
+        return;
+    }
+
+    char    text[40];
+    char    anchor[40];
+    char   *p = text;
+    unicode c = hf.get();
+    while (c && c != ']' && p < text + sizeof(text) - 1)
+    {
+        *p++ = char(c);
+        c    = hf.get();
+    }
+    *p = 0;
+
+    c = hf.get();
+    if (c != '(')
+    {
+        record(help, "%+s pos=%u text=%+s (no link)", label, pos, text);
+        return;
+    }
+
+    char *ap = anchor;
+    while (c != ')')
+    {
+        c = hf.get();
+        if (c != '#')
+        {
+            if (ap < anchor + sizeof(anchor) - 1)
+                *ap++ = char(c);
+        }
+    }
+    *ap = 0;
+
+    record(help, "%+s pos=%u text=%+s anchor=%+s", label, pos, text, anchor);
+}
+
+
 bool user_interface::draw_help()
 // ----------------------------------------------------------------------------
 //    Draw the help content
 // ----------------------------------------------------------------------------
 {
 restart:
-    record(help, "draw_help entry force=%u dirty=%u stack=%u freeze=%u",
+    record(help_trace, "draw_help entry force=%u dirty=%u stack=%u freeze=%u",
            force, dirtyHelp, dirtyStack, freezeStack);
     if ((!force && !dirtyHelp && !dirtyStack) || freezeStack)
         return false;
@@ -4025,6 +4229,8 @@ restart:
     uint    lastTopic = 0;
     uint    codeStart = 0;
     uint    shown     = 0;
+    uint    highlight = topic;
+    uint    skipDraws = skipTopicSync;
     bool    hadTitle  = false;
     id      hadCmd    = id(0);
     static char link[60];
@@ -4034,12 +4240,21 @@ restart:
     coord       table_col_w = 0;
     bool        advance_col = false;
     bool        escaped     = false;
+    uint        nlAdvance   = 0;
+    uint        nlGlyph     = 0;
+    uint        crUnexpected = 0;
 
     // Pun not indented
     helpfile.seek(help);
+    help_log_raw(HELPFILE_NAME, help, 1, 40, "draw_help seek");
 
-    // Display until end of help
-    while (y < ybot)
+    record(help_trace, "draw_help scroll: help=%u line=%u topic=%u y0=%d ytop=%d "
+           "height=%u stackTop=%u",
+           help, line, topic, int(ytop + 2 - line), int(ytop), height,
+           stackTop);
+
+    // Display until end of help, and beyond while measuring an up scroll
+    while (y < ybot || helpUpTarget)
     {
         byte       buffer[80];
         uint       widx    = 0;
@@ -4049,16 +4264,47 @@ restart:
         bool       blue    = false;
         style_name restyle = style;
 
+        // After an up scroll across topics, the position we came from is
+        // now reached: shift the view so that it lands where it should,
+        // helpUpOffset pixels below the top, and draw again
+        if (helpUpTarget && helpfile.position() >= helpUpTarget)
+        {
+            int want  = int(ytop + 2) + helpUpOffset;
+            int moved = int(line) + int(y) - want;
+            record(help_trace, "up measured: target=%u y=%d want=%d line %u->%d",
+                   helpUpTarget, int(y), want, line, moved);
+            helpUpTarget = 0;
+            line         = moved > 0 ? uint(moved) : 0;
+            dirtyHelp    = true;
+            Screen.clip(clip);
+            goto restart;
+        }
+
         if (!shown)
         {
             if (y >= ytop)
             {
                 shown  = helpfile.position();
+                record(help_trace, "shown set: shown=%u y=%d line=%u pos=%u",
+                       shown, int(y), line, helpfile.position());
             }
-            else if (last == '\n' && line > 0 && y < ytop - 2*LCD_H)
+            else if (last == '\n' && line > 0 && y < ytop - 2*LCD_H &&
+                     style == NORMAL && !in_table && !hadTitle)
             {
+                // Resume later drawings from here, but only outside of code
+                // blocks and tables: restarting inside a ``` block would
+                // swap code and text until the next fence. Not right after
+                // a title either: the space below the title is only added
+                // with the next word, and a restart would lose it, so that
+                // the next drawing would shift the text up
+                uint oldHelp = help;
+                uint oldLine = line;
                 help = helpfile.position();
                 line = ytop + 2 - y;
+                record(help_trace,
+                       "scroll adjust: help %u->%u line %u->%u y=%d pos=%u",
+                       oldHelp, help, oldLine, line, int(y),
+                       helpfile.position());
             }
         }
 
@@ -4088,6 +4334,13 @@ restart:
                 }
                 skip = last == ' ';
                 emit = style != KEY && style != CODE;
+                break;
+
+            case '\r':
+                crUnexpected++;
+                record(help_trace, "unexpected CR in draw at pos=%u",
+                       helpfile.position() - 1);
+                skip = true;
                 break;
 
             case '\n':
@@ -4164,7 +4417,7 @@ restart:
                         {
                             c = helpfile.get();
                             size_t sz = utf8_size(c);
-                            if (byte *p = rt.allocate(sz))
+                            if (byte *p = scr.allocate(sz))
                                 utf8_encode(c, p);
                             else
                                 isimg = false;
@@ -4195,7 +4448,7 @@ restart:
                                 image = files->recall_grob(name);
                             impos = offs;
 
-                            helpfile.open(HELPFILE_NAME, file::READING);
+                            helpfile.open(HELPFILE_NAME, file::READING_BINARY);
                             helpfile.seek(offs);
                         }
                         imdsp = true;
@@ -4295,7 +4548,7 @@ restart:
                 if (last == '\n' && helpfile.peek() == ' ')
                 {
                     restyle = NORMAL;
-                    ch      = L'●';
+                    ch      = U'●';
                     xleft   = r.x1 + 2 + font->width(utf8("● "));
                     break;
                 }
@@ -4305,7 +4558,7 @@ restart:
                 if (last == '\n' && helpfile.peek() == ' ')
                 {
                     restyle = NORMAL;
-                    ch      = L'●'; // L'■'; // L'•';
+                    ch      = U'●'; // U'■'; // U'•';
                     xleft   = r.x1 + 2 + font->width(utf8("● "));
                     break;
                 }
@@ -4368,9 +4621,14 @@ restart:
                         if (wascode)
                         {
                             lastTopic = pos;
-                            if (topic < shown)
-                                topic = lastTopic;
-                            if (lastTopic == topic)
+                            if (highlight < shown)
+                            {
+                                record(help,
+                                       "highlight bump code: %u -> %u shown=%u",
+                                       highlight, lastTopic, shown);
+                                highlight = lastTopic;
+                            }
+                            if (lastTopic == highlight)
                             {
                                 restyle    = HIGHLIGHTED_CODE;
                                 codeStart  = 0;
@@ -4430,12 +4688,18 @@ restart:
                     if (helpfile.peek() != '!')
                     {
                         lastTopic      = helpfile.position();
-                        if (topic < shown)
-                            topic      = lastTopic;
-                        if (lastTopic == topic)
+                        if (!skipDraws && highlight < shown)
+                        {
+                            record(help, "highlight bump link: %u -> %u shown=%u",
+                                   highlight, lastTopic, shown);
+                            highlight  = lastTopic;
+                        }
+                        if (lastTopic == highlight)
                         {
                             restyle    = HIGHLIGHTED_TOPIC;
                             codeStart  = 0;
+                            record(help, "highlight start pos=%u highlight=%u",
+                                   lastTopic, highlight);
                         }
                         else
                         {
@@ -4471,20 +4735,40 @@ restart:
                         break;
                     }
 
+                    // The anchor may hold non-ASCII characters, e.g. the
+                    // arrow of `#llh→xyz`: store them as UTF-8, not as a
+                    // truncated byte, or the topic is never found
                     char *p = link;
                     while (n != ')')
                     {
                         n = helpfile.get();
                         if (n != '#')
-                            if (p < link + sizeof(link))
-                                *p++ = n;
+                        {
+                            byte   enc[4];
+                            size_t sz = utf8_encode(n, enc);
+                            if (p + sz <= link + sizeof(link))
+                            {
+                                memcpy(p, enc, sz);
+                                p += sz;
+                            }
+                        }
                     }
                     p[-1] = 0;
+                    if (style == HIGHLIGHTED_TOPIC)
+                        record(help,
+                               "highlight link pos=%u anchor=%+s follow=%u "
+                               "y=%d help=%u line=%u shown=%u",
+                               lastTopic, link, uint(follow), int(y),
+                               help, line, shown);
                     if (follow && style == HIGHLIGHTED_TOPIC && y >= 0)
                     {
+                        record(help, "follow link anchor=%+s shown=%u",
+                               link, shown);
+                        help_log_raw(HELPFILE_NAME, help, 1, 20, "before follow");
                         if (topicsHistory)
                             topics[topicsHistory-1] = shown;
                         load_help(utf8(link));
+                        help_log_raw(HELPFILE_NAME, help, 1, 40, "after follow");
                         Screen.clip(clip);
                         goto restart;
                     }
@@ -4493,11 +4777,11 @@ restart:
                     skip    = true;
                 }
                 break;
-            case L'🟨':
+            case U'🟨':
                 emit = true;
                 yellow = true;
                 break;
-            case L'🟦':
+            case U'🟦':
                 emit = true;
                 blue = true;
                 break;
@@ -4507,6 +4791,15 @@ restart:
 
             if (!skip)
                 widx += utf8_encode(ch, buffer+widx);
+            if (ch == '\n' && !skip && widx > 0)
+            {
+                nlGlyph++;
+                uint pos = helpfile.position() - 1;
+                if (pos + 100 >= topic && pos <= topic + 300)
+                    record(help_trace,
+                           "NL glyph pos=%u widx=%u y=%d style=%u emit=%u",
+                           pos, widx, int(y), style, emit);
+            }
             if (widx         >= sizeof(buffer) / sizeof(buffer[0]) - 3)
                 emit          = true;
             last              = ch;
@@ -4757,6 +5050,12 @@ restart:
 
         if (newline)
         {
+            nlAdvance++;
+            uint pos = helpfile.position();
+            if (pos + 100 >= topic && pos <= topic + 300)
+                record(help_trace,
+                       "NL advance pos=%u y=%d hadTitle=%u in_table=%u",
+                       pos, int(y), hadTitle, in_table);
             if (in_table)
             {
                 table_col = 0;
@@ -4787,13 +5086,29 @@ restart:
         style = restyle;
     }
 
-    if (helpfile.position() < topic)
-        topic = lastTopic;
+    if (!skipDraws && helpfile.position() < highlight)
+        highlight = lastTopic;
+
+    if (skipDraws)
+        highlight = topic;
+
+    if (skipTopicSync)
+        skipTopicSync--;
+    else
+        topic = highlight;
+
+    record(help, "draw_help end: topic=%u highlight=%u help=%u lastTopic=%u "
+           "pos=%u shown=%u skip=%u y=%d line=%u",
+           topic, highlight, help, lastTopic, helpfile.position(), shown,
+           skipTopicSync, int(y), line);
+    record(help_trace, "draw_help trace: NL advance=%u glyph=%u cr=%u",
+           nlAdvance, nlGlyph, crUnexpected);
 
     Screen.clip(clip);
 
     if (follow && codeStart)
     {
+        help_log_raw(HELPFILE_NAME, codeStart, 0, 24, "codeStart");
         helpfile.seek(codeStart);
         uint codeEnd = 0;
         uint markers = 0;
@@ -4801,14 +5116,14 @@ restart:
         {
             if (c == '`')
             {
-                if (!markers)
-                    codeEnd = helpfile.position() - 2; // Remove last \n
                 markers++;
                 if (markers == 3)
                     break;
             }
             else
             {
+                if (c != '\n')
+                    codeEnd = helpfile.position();
                 markers = 0;
             }
         }
@@ -5003,7 +5318,10 @@ bool user_interface::handle_help(int &key)
     switch (key)
     {
     case KEY_F1:
+        skipTopicSync = 0;
         load_help(utf8("Overview"));
+        topic = help;
+        line  = 0;
         break;
     case KEY_F2:
         count = 8;
@@ -5013,27 +5331,46 @@ bool user_interface::handle_help(int &key)
     case KEY_SUB:
         if (line > count * height)
         {
+            skipTopicSync = 0;
             line -= count * height;
+            record(help, "UP pixel: line=%u topic=%u help=%u count=%u",
+                   line, topic, help, count);
         }
         else
         {
+            // The line count below only estimates the height walked over:
+            // long lines wrap, code blocks and figures have their own
+            // height. Record where the current position must land, count
+            // lines below the top, so that draw_help can measure it there.
+            helpUpTarget = help;
+            helpUpOffset = int(count * height) - int(line);
             line = 0;
             count++;
+            skipTopicSync = 2;
+            record(help, "UP sect: before help=%u line=%u topic=%u count=%u "
+                   "height=%u",
+                   help, line, topic, count, uint(height));
             while(count--)
             {
+                uint before = help;
                 helpfile.seek(help);
                 help = helpfile.rfind('\n');
-                unicode next = helpfile.peek();
+                unicode next = helpfile.help_section_char();
                 if (next != '#')
                 {
                     count++;
                     line += height;
                 }
+                record(help,
+                       "UP sect: iter help %u->%u next=%+c line=%u count=%u",
+                       before, help, next, line, count);
                 if (!help)
                     break;
             }
             if (help)
                 help = helpfile.position();
+            record(help, "UP sect: after help=%u line=%u topic=%u",
+                   help, line, topic);
         }
         repeat = true;
         dirtyHelp = true;
@@ -5045,6 +5382,7 @@ bool user_interface::handle_help(int &key)
     case KEY_DOWN:
     case KEY_2:
     case KEY_ADD:
+        skipTopicSync = 0;
         line   += count * height;
         repeat  = true;
         dirtyHelp = true;
@@ -5054,12 +5392,22 @@ bool user_interface::handle_help(int &key)
     case KEY_9:
     case KEY_DIV:
         ++count;
+        record(help, "F4: before topic=%u help=%u line=%u count=%u",
+               topic, help, line, count);
+        help_log_raw(HELPFILE_NAME, topic, 4, 24, "F4: before");
         while(count--)
         {
             helpfile.seek(topic);
+            uint before = topic;
             topic = helpfile.rfind('[', '`');
+            record(help, "F4: rfind off=%u pos=%u (from %u)",
+                   topic, helpfile.position(), before);
         }
         topic  = helpfile.position();
+        skipTopicSync = 2;
+        help_log_link_at(helpfile, topic, "F4: after");
+        record(help, "F4: after help=%u line=%u topic=%u",
+               help, line, topic);
         repeat = true;
         dirtyHelp = true;
         break;
@@ -5070,17 +5418,20 @@ bool user_interface::handle_help(int &key)
         while (count--)
             helpfile.find('[', '`');
         topic  = helpfile.position();
+        skipTopicSync = 2;
         repeat = true;
         dirtyHelp = true;
         break;
 
     case KEY_ENTER:
+        skipTopicSync = 0;
         follow = true;
         dirtyHelp = true;
         break;
 
     case KEY_F6:
     case KEY_BSP:
+        skipTopicSync = 0;
         if (topicsHistory)
         {
             --topicsHistory;
@@ -5088,6 +5439,8 @@ bool user_interface::handle_help(int &key)
             {
                 help = topics[topicsHistory-1];
                 line = 0;
+                record(help, "F6 back: help=%u line=%u topic=%u history=%u",
+                       help, line, topic, topicsHistory);
                 dirtyHelp = true;
                 break;
             }
@@ -5335,9 +5688,7 @@ bool user_interface::handle_editing(int key)
             if (xshift)
             {
                 // Sort by value
-                typedef int (*qsort_fn)(const void *, const void*);
-                qsort(rt.stack_base(), interactive,
-                      sizeof(object_p), qsort_fn(value_compare));
+                rt.sort(interactive, value_compare);
             }
             else if (shift)
             {
@@ -5357,9 +5708,7 @@ bool user_interface::handle_editing(int key)
             if (xshift)
             {
                 // Sort by memory representation
-                typedef int (*qsort_fn)(const void *, const void*);
-                qsort(rt.stack_base(), interactive,
-                      sizeof(object_p), qsort_fn(memory_compare));
+                rt.sort(interactive,  memory_compare);
             }
             else if (shift)
             {
@@ -5562,7 +5911,7 @@ bool user_interface::handle_editing(int key)
                     insert('=', ALGEBRAIC);
                 #if (KBD_CASIO_50 == 0)
                 else
-                    insert(L'«', PROGRAM);
+                    insert(U'«', PROGRAM);
                 #else
                 dirtyStack = true;
                 return false;
@@ -5868,24 +6217,24 @@ bool user_interface::handle_alpha(int key)
 
     static const unicode shifted[] =
     {
-        L'Σ', '^', L'√', L'∂', L'σ', '(',
-        L'▶', '%', L'π', '<', '=', '>',
-        '_', L'⇄', L'±', L'∡', '_',
-        '_', '7', '8', '9', L'÷',
-        '_', '4', '5', '6', L'×',
+        U'Σ', '^', U'√', U'∂', U'σ', '(',
+        U'▶', '%', U'π', '<', '=', '>',
+        '_', U'⇄', U'±', U'∡', '_',
+        '_', '7', '8', '9', U'÷',
+        '_', '4', '5', '6', U'×',
         '_', '1', '2', '3', '-',
-        '_', '0', '.',  L'«', '+'
+        '_', '0', '.',  U'«', '+'
     };
 
     static const  unicode xshifted[] =
     {
-        L'∏', L'∆', L'↑', L'μ', L'θ', '\'',
-        L'→', L'←', L'↓', L'≤', L'≠', L'≥',
-        '"',  '~', L'°', L'ε', '\n',
-        '_',  '?', L'∫',   '[',  '/',
-        '_',  '#',  L'∞', '|' , '*',
-        '_',  '&',   '@', '$',  L'…',
-        '_',  ';',  L'·', '{',  '!'
+        U'∏', U'∆', U'↑', U'μ', U'θ', '\'',
+        U'→', U'←', U'↓', U'≤', U'≠', U'≥',
+        '"',  '~', U'°', U'ε', '\n',
+        '_',  '?', U'∫',   '[',  '/',
+        '_',  '#',  U'∞', '|' , '*',
+        '_',  '&',   '@', '$',  U'…',
+        '_',  ';',  U'·', '{',  '!'
     };
     // Special case: [CAT] / + in alpha mode shows the catalog
     //  KBD_CASIO_50 has a dedicated catalog key, for DM keybard KEY_CAT is defined with KEY_PLUS in dmcp.h
@@ -6236,11 +6585,11 @@ bool user_interface::handle_digits(int key)
             {
             case KEY_ADD:       found = do_search('+'); break;
             case KEY_SUB:       found = do_search('-'); break;
-            case KEY_MUL:       found = do_search('*')||do_search(L'×')
-                                                      ||do_search(L'·'); break;
-            case KEY_DIV:       found = do_search('/')||do_search(L'÷'); break;
-            case KEY_DOT:       found = do_search('.')||do_search(L','); break;
-            case KEY_E:         found = do_search('E')||do_search(L'⁳'); break;
+            case KEY_MUL:       found = do_search('*')||do_search(U'×')
+                                                      ||do_search(U'·'); break;
+            case KEY_DIV:       found = do_search('/')||do_search(U'÷'); break;
+            case KEY_DOT:       found = do_search('.')||do_search(U','); break;
+            case KEY_E:         found = do_search('E')||do_search(U'⁳'); break;
             default:
                 if (c == '_')
                     return false;
@@ -6734,7 +7083,7 @@ bool user_interface::load_keymap(cstring name)
             if (parsed->type() == object::ID_symbol)
                 record(keymap_warning, "%s key %u: %t is a symbol",
                        name, key, parsed);
-            rt.append(parsed);
+            scr.append(parsed);
             idx = 0;
         }
         if (!c)
@@ -6759,8 +7108,8 @@ object_p user_interface::object_for_key(int key)
 //    Return the object for a given key
 // ----------------------------------------------------------------------------
 {
-    object_p obj = nullptr;
-    uint plane = shift_plane();
+    object_p obj   = nullptr;
+    uint     plane = shift_plane();
     if (key >= KEY_F1 && key <= KEY_F6)
     {
         uint fplane = plane < menu_planes() ? plane : 0;
@@ -6779,6 +7128,72 @@ object_p user_interface::object_for_key(int key)
     if (*ptr)
         obj = (object_p) ptr;
     return obj;
+}
+
+
+uint user_interface::key_for_position(object_p obj, uint *plane)
+// ----------------------------------------------------------------------------
+//    Convert the HP48 format (rc.p = row, column, plane) to native key
+// ----------------------------------------------------------------------------
+{
+    uint rc = obj->as_uint32(0, true);
+    uint pf = 0;
+
+    if (decimal_g rcp = obj->as<decimal>())
+    {
+        if (rc >= 100)
+        {
+            rt.value_error();
+            return 0;
+        }
+        if (decimal_g rcps = decimal::make(1, 2)) // Decimal part * 100
+            if (decimal_g rcpf = (rcps * rcp) % rcps)
+                pf = rcpf->as_unsigned();
+    }
+    if (plane)
+    {
+        *plane = pf;
+        pf     = 0;
+    }
+    return platform_keyid(rc, pf);
+}
+
+
+object_p user_interface::object_for_key(object_p pos)
+// ----------------------------------------------------------------------------
+//   Give the object associated to a key position given in user format
+// ----------------------------------------------------------------------------
+{
+    uint plane = 0;
+    if (uint keyid = key_for_position(pos, &plane))
+    {
+        plane /= 10;
+        shift             = plane == 2 || plane == 5 || plane == 8;
+        xshift            = plane == 3 || plane == 6 || plane == 9;
+        alpha             = plane >= 4;
+        lowercase         = plane >= 7;
+        return object_for_key(keyid);
+    }
+    return nullptr;
+}
+
+
+bool user_interface::keyeval(object_p pos)
+// ----------------------------------------------------------------------------
+//   Emulate typing a given key
+// ----------------------------------------------------------------------------
+{
+    uint plane = 0;
+    if (uint keyid = key_for_position(pos, &plane))
+    {
+        plane /= 10;
+        shift             = plane == 2 || plane == 5 || plane == 8;
+        xshift            = plane == 3 || plane == 6 || plane == 9;
+        alpha             = plane >= 4;
+        lowercase         = plane >= 7;
+        return key(keyid, false, false) & key(0, false, false);
+    }
+    return false;
 }
 
 
@@ -6868,7 +7283,7 @@ bool user_interface::handle_functions(int key, object_p objp, bool user)
             else if (ty == object::ID_constant_menu_name)
             {
                 unicode lc = character_left_of_cursor();
-                if (lc == L'Ⓒ' || lc == L'Ⓡ' || lc == L'Ⓢ')
+                if (lc == U'Ⓒ' || lc == U'Ⓡ' || lc == U'Ⓢ')
                 {
                     dirtyEditor = true;
                     edRows = 0;
@@ -7332,17 +7747,17 @@ bool user_interface::do_decimal_separator()
     {
         p = (byte *) utf8_previous(p);
         unicode cp = utf8_codepoint(p);
-        if (cp == L'″')
+        if (cp == U'″')
         {
             found = p;
             c = '/';
         }
-        else if (cp == L'′')
+        else if (cp == U'′')
         {
             found = p;
-            c = L'″';
+            c = U'″';
         }
-        else if (cp == L'°')
+        else if (cp == U'°')
         {
             found = p;
             if (uint(found - ed) == cursor - utf8_size(cp))
@@ -7359,7 +7774,7 @@ bool user_interface::do_decimal_separator()
             }
             else
             {
-                c = L'′';
+                c = U'′';
             }
         }
         else if (cp == dm)
@@ -7368,12 +7783,12 @@ bool user_interface::do_decimal_separator()
             remove (found - ed, utf8_size(cp));
             if (uint(found - ed - 1) == cursor - utf8_size(cp))
             {
-                c = L'°';
+                c = U'°';
             }
             else
             {
-                insert(found - ed, unicode(L'°'));
-                c = L'′';
+                insert(found - ed, unicode(U'°'));
+                c = U'′';
             }
             size_t edlen = rt.editing();
             ed = rt.editor();
@@ -7599,7 +8014,7 @@ bool user_interface::do_search(unicode with, bool restart)
         selected = 0;
         select = cursor;
     }
-    size_t found  = ~0;
+    size_t found  = SIZE_MAX;
     uint   ref    = forward ? select : cursor;
     uint   start  = restart ? searching : ref;
     uint   search = start;

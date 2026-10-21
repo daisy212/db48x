@@ -59,7 +59,7 @@ MARKER_BODY(menu)
 //   A menu has a mark to identify it
 // ----------------------------------------------------------------------------
 {
-    return L'◥';
+    return U'◥';
 }
 
 
@@ -656,7 +656,8 @@ MENU(PolynomialsMenu,
      "TVMRoot", ID_TVMRoot,
      "FRoots",  ID_Unimplemented,
      "XRoot",   ID_xroot,
-     "FCoef",   ID_Unimplemented);
+     "FCoef",   ID_Unimplemented,
+     "PrtFrc",  ID_PartFrac);
 
 
 MENU(HyperbolicMenu,
@@ -1040,7 +1041,10 @@ MENU(DebugMenu,
 
      "Run",             ID_Run,
      "ErrDbg",          ID_DebugOnError,
-     "Prog",            ID_ProgramMenu);
+     "Prog",            ID_ProgramMenu,
+     "Record",          ID_FlightRecorderConfigure,
+     "WSLog",           ID_FlightRecorderDump,
+     "DumpSome",        ID_FlightRecorderDumpSome);
 
 
 MENU(TestsMenu,

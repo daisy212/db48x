@@ -253,8 +253,11 @@ static int state_save_callback(cstring fpath, cstring fname, void *data)
     file prog(fpath, file::WRITING);
     if (!prog.valid())
     {
-        ui.draw_message("State save failed", prog.error(), fpath);
-        wait_for_key_press();
+        if (data != STATE_IO_SILENT)
+        {
+            ui.draw_message("State save failed", prog.error(), fpath);
+            wait_for_key_press();
+        }
         return 1;
     }
 
@@ -627,7 +630,7 @@ bool load_state_file(cstring path)
 //   Load the state file directly
 // ----------------------------------------------------------------------------
 {
-    return ui_wrap_io(state_load_callback, path, STATE_IO_INTERACTIVE, false) == 0;
+    return !ui_wrap_io(state_load_callback, path, STATE_IO_INTERACTIVE, false);
 }
 
 
@@ -636,7 +639,7 @@ bool load_state_file_silent(cstring path)
 //   Load the state file directly
 // ----------------------------------------------------------------------------
 {
-    return ui_wrap_io(state_load_callback, path, STATE_IO_SILENT, false) == 0;
+    return !ui_wrap_io(state_load_callback, path, STATE_IO_SILENT, false);
 }
 
 
@@ -645,7 +648,7 @@ bool save_state_file(cstring path)
 //   Save the state file directly
 // ----------------------------------------------------------------------------
 {
-    return ui_wrap_io(state_save_callback, path, STATE_IO_INTERACTIVE, true) == 0;
+    return !ui_wrap_io(state_save_callback, path, STATE_IO_INTERACTIVE, true);
 }
 
 
@@ -654,7 +657,7 @@ bool save_state_file_silent(cstring path)
 //   Save the state file directly
 // ----------------------------------------------------------------------------
 {
-    return ui_wrap_io(state_save_callback, path, STATE_IO_SILENT, true) == 0;
+    return !ui_wrap_io(state_save_callback, path, STATE_IO_SILENT, true);
 }
 
 
@@ -671,6 +674,15 @@ bool load_system_state()
         char *state = get_reset_state_file();
         if (is_valid_state_file(state))
             return load_state_file_silent(state);
+#if SIMULATOR
+        extern bool clean_slate;
+        if (clean_slate)
+            return false;
+#endif
+
+        // On an uninitialized calculator, load the default demo state
+        if (load_state_file_silent("state/Demo.48S"))
+            return true;
     }
     return false;
 }

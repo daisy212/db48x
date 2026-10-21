@@ -197,7 +197,8 @@ object_p object::parse(utf8    source,
                        size_t &size,
                        int     precedence,
                        unicode separator,
-                       bool    truenames)
+                       bool    truenames,
+                       bool    quoted)
 // ----------------------------------------------------------------------------
 //  Try parsing the object as a top-level temporary
 // ----------------------------------------------------------------------------
@@ -220,7 +221,7 @@ object_p object::parse(utf8    source,
     result  r      = SKIP;
     bool    is_fp  = false;
     unicode cp     = utf8_codepoint(source);
-    parser  p(source, size, precedence, separator, truenames);
+    parser  p(source, size, precedence, separator, truenames, quoted);
 
 retry:
     switch (cp)
@@ -280,7 +281,7 @@ retry:
     case '[':                   // Arrays
         r = array::do_parse(p);
         break;
-    case L'«':                  // Programs
+    case U'«':                  // Programs
         r = program::do_parse(p);
         break;
     case '(':
@@ -294,37 +295,37 @@ retry:
     case complex::ANGLE_MARK:   // Polar complex numbers
         r = polar::do_parse(p);
         break;
-    case L'Ⓒ':                  // Constants
+    case U'Ⓒ':                  // Constants
         r = constant::do_parse(p);
         break;
-    case L'Ⓔ':                  // Equations
+    case U'Ⓔ':                  // Equations
         r = equation::do_parse(p);
         break;
-    case L'Ⓛ':                  // Library items
+    case U'Ⓛ':                  // Library items
         r = xlib::do_parse(p);
         break;
-    case L'Ⓡ':                  // Constants relative uncertainty
+    case U'Ⓡ':                  // Constants relative uncertainty
         r = relative_uncertainty::do_parse(p);
         break;
-    case L'Ⓢ':                  // Constants standard uncertainty
+    case U'Ⓢ':                  // Constants standard uncertainty
         r = standard_uncertainty::do_parse(p);
         break;
-    case L'Ⓟ':                  // Polynomials
+    case U'Ⓟ':                  // Polynomials
         r = polynomial::do_parse(p);
         break;
-    case L'Ⓥ':
+    case U'Ⓥ':
         r = symbol::do_parse(p);
         break;
     case ':':                   // Tagged objects
         r = tag::do_parse(p);
         break;
-    case L'∂':
+    case U'∂':
         r = Derivative::do_parse(p);
         break;
-    case L'∫':
+    case U'∫':
         r = Primitive::do_parse(p);
         break;
-    case L'−':
+    case U'−':
         r = range::do_parse(p);
         if (r == OK)
             break;
@@ -334,7 +335,7 @@ retry:
         r = command::do_parse(p);
         if (r == SKIP && is_valid_as_name_initial(cp))
         {
-            if (r == SKIP && (cp == L'→' || cp == L'▶'))
+            if (r == SKIP && (cp == U'→' || cp == U'▶'))
                 r = locals::do_parse(p);
             if (r == SKIP)
             {
@@ -541,13 +542,109 @@ text_p object::as_text(bool edit, bool equation) const
 }
 
 
-uint32_t object::as_uint32(uint32_t def, bool err) const
+static bool machine_integer_ok(object_p obj, bool sgn, bool integral)
+// ----------------------------------------------------------------------------
+//   Check that a numerical object fits in a 32-bit machine integer
+// ----------------------------------------------------------------------------
+//   Raises "Bad argument value" and returns false if the value is out of
+//   range, negative for an unsigned target, or non-integral when `integral`.
+//   Non-numerical types return true and are left to the caller's type check.
+{
+    ularge mag        = 0;
+    bool   neg        = false;
+    bool   overflow   = false;
+    bool   fractional = false;
+    object::id ty     = obj->type();
+    switch(ty)
+    {
+#if CONFIG_FIXED_BASED_OBJECTS
+    case object::ID_hex_integer:
+    case object::ID_dec_integer:
+    case object::ID_oct_integer:
+    case object::ID_bin_integer:
+#endif // CONFIG_FIXED_BASED_OBJECTS
+    case object::ID_based_integer:
+    case object::ID_integer:
+        mag = integer_p(obj)->value<ularge>();
+        break;
+    case object::ID_neg_integer:
+        neg = true;
+        mag = integer_p(obj)->value<ularge>();
+        break;
+#if CONFIG_FIXED_BASED_OBJECTS
+    case object::ID_hex_bignum:
+    case object::ID_dec_bignum:
+    case object::ID_oct_bignum:
+    case object::ID_bin_bignum:
+#endif // CONFIG_FIXED_BASED_OBJECTS
+    case object::ID_based_bignum:
+    case object::ID_bignum:
+    case object::ID_neg_bignum:
+    {
+        size_t size = 0;
+        byte_p bytes = bignum_p(obj)->value(&size);
+        for (size_t i = sizeof(ularge); i < size; i++)
+            if (bytes[i])
+                overflow = true;
+        neg = ty == object::ID_neg_bignum;
+        mag = bignum_p(obj)->value<ularge>();
+        break;
+    }
+    case object::ID_hwfloat:
+    case object::ID_hwdouble:
+    {
+        double fp = ty == object::ID_hwfloat
+            ? hwfloat_p(obj)->as_double()
+            : hwdouble_p(obj)->as_double();
+        neg = fp < 0.0;
+        if (neg)
+            fp = -fp;
+        if (!(fp < 18446744073709551616.0))
+            overflow = true;
+        else
+            mag = ularge(fp);
+        fractional = fp != double(mag);
+        break;
+    }
+    case object::ID_decimal:
+    case object::ID_neg_decimal:
+        neg = ty == object::ID_neg_decimal;
+        mag = decimal_p(obj)->as_unsigned(true);
+        overflow = mag == ~0ULL;
+        fractional = !decimal_p(obj)->is_integral();
+        break;
+    case object::ID_fraction:
+    case object::ID_big_fraction:
+    case object::ID_neg_fraction:
+    case object::ID_neg_big_fraction:
+        neg = ty == object::ID_neg_fraction ||
+              ty == object::ID_neg_big_fraction;
+        fractional = true;
+        break;
+    default:
+        return true;
+    }
+
+    ularge max = sgn ? (neg ? 0x80000000ULL : 0x7FFFFFFFULL) : 0xFFFFFFFFULL;
+    if (overflow || mag > max || (neg && !sgn) || (integral && fractional))
+    {
+        rt.value_error();
+        return false;
+    }
+    return true;
+}
+
+
+uint32_t object::as_uint32(uint32_t def, bool err, bool integral) const
 // ----------------------------------------------------------------------------
 //   Return the given object as an uint32
 // ----------------------------------------------------------------------------
 //   def is the default value if no valid value comes from object
 //   err indicates if we error out in that case
+//   integral indicates if non-integral values are an error (requires err)
 {
+    if (err && !machine_integer_ok(this, false, integral))
+        return def;
     id ty = type();
     switch(ty)
     {
@@ -597,11 +694,13 @@ uint32_t object::as_uint32(uint32_t def, bool err) const
 }
 
 
-int32_t object::as_int32 (int32_t  def, bool err)  const
+int32_t object::as_int32 (int32_t  def, bool err, bool integral)  const
 // ----------------------------------------------------------------------------
 //   Return the given object as an int32
 // ----------------------------------------------------------------------------
 {
+    if (err && !machine_integer_ok(this, true, integral))
+        return def;
     id ty = type();
     switch(ty)
     {
@@ -797,9 +896,14 @@ object_p object::at(object_p index) const
 {
     if (list_p idxlist = index->as_array_or_list())
     {
-        object_p result = this;
-        for (object_p idxobj : *idxlist)
+        list_g   safe_idx = idxlist;
+        object_g result   = this;
+        size_t   count    = idxlist->items();
+        for (size_t i = 0; i < count; i++)
         {
+            object_p idxobj = list_p(+safe_idx)->at(i);
+            if (!idxobj)
+                return nullptr;
             result = result->at(idxobj);
             if (!result)
                 return nullptr;
@@ -807,6 +911,7 @@ object_p object::at(object_p index) const
         return result;
     }
 
+    object_g self = this;
     if (algebraic_p alg = index->as_extended_algebraic())
         if (algebraic_p idalg = alg->evaluate())
             index = idalg;
@@ -816,7 +921,7 @@ object_p object::at(object_p index) const
         rt.index_error();
     if (rt.error())
         return nullptr;
-    return at(idx - 1);
+    return self->at(idx - 1);
 }
 
 
@@ -870,7 +975,15 @@ object_p object::at(object_p index, object_p value) const
 
         // Check if we need to recurse
         if (tail && tail->length())
+        {
             item = first->at(tail, value);
+            if (!item)
+            {
+                if (!rt.error())
+                    rt.type_error();
+                return nullptr;
+            }
+        }
 
         // For a list, copy bytes before, value bytes, and bytes after
         size_t   size  = 0;
@@ -988,6 +1101,7 @@ bool object::object_error(id type, object_p ptr)
            "Invalid type %d for %p  Data %16llX %16llX",
            type, ptr, debug[0], debug[1]);
     runtime::dump_gc_pointers();
+    recorder_dump();
     return false;
 }
 #endif // SIMULATOR
@@ -1052,14 +1166,15 @@ size_t object::render(renderer &r) const
 // ------------------------------------------------------------------------
 {
     record(render, "Rendering %p into %p", this, &r);
-    if (r.stack())
-    {
+    if (!r.editing())
         if (Settings.ShowAsDecimal())
             if (is_real() && !is_fp())
                 if (algebraic_g x = this->as_algebraic())
                     if (algebraic::decimal_promotion(x))
                         return decimal::do_render(decimal_p(+x), r);
 
+    if (r.stack())
+    {
         size_t sz = size();
         if (sz > Settings.TextRenderingSizeLimit())
             return r.printf("Large %s (%lu bytes)", name(), sz);
@@ -1705,8 +1820,8 @@ bool object::is_number() const
 {
     return is_real() ||
         (is_complex() &&
-         complex_p(this)->x()->is_real() &&
-         complex_p(this)->y()->is_real());
+         complex_p(this)->xp()->is_real() &&
+         complex_p(this)->yp()->is_real());
 }
 
 

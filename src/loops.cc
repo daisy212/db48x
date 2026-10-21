@@ -233,7 +233,7 @@ object::result loop::object_parser(parser  &p,
                 return ERROR;
 
             // Copy the parsed object to the scratch pad (may GC)
-            byte *objcopy = rt.append(obj);
+            byte *objcopy = scr.append(obj);
             if (!objcopy)
                 return ERROR;
 
@@ -285,6 +285,8 @@ object::result loop::object_parser(parser  &p,
         gcbytes  scratch = scr.scratch() + namesz;
         size_t   alloc   = scr.growth() - namesz;
         object_p prog    = rt.make<program>(ID_block, scratch, alloc);
+        if (!prog)
+            return ERROR;
         if (sep == middle)
         {
             obj1 = prog;

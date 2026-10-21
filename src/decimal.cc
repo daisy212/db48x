@@ -204,7 +204,7 @@ PARSE_BODY(decimal)
                 kigit = kigit * 10 + (cp - '0');
                 if (++kigc == 3)
                 {
-                    kint *kigp = (kint *) rt.allocate(sizeof(kint));
+                    kint *kigp = (kint *) scr.allocate(sizeof(kint));
                     if (!kigp)
                         return ERROR;
                     *kigp = kigit;
@@ -218,8 +218,17 @@ PARSE_BODY(decimal)
                 exponent--;
             }
         }
-        else if (decimalDot < 0 && (cp == '.' || (cp == ',' && !p.precedence)))
+        else if (cp == '.' || (cp == ',' && !p.precedence))
         {
+            // A second decimal dot, e.g. `1.5.2`, is a syntax error
+            // A comma after a dot may be a separator, e.g. `{ 1.5,2 }`
+            if (decimalDot >= 0 && cp == ',')
+                break;
+            if (decimalDot >= 0)
+            {
+                rt.syntax_error().source(s);
+                return ERROR;
+            }
             decimalDot = +s - +source;
         }
         else
@@ -235,7 +244,7 @@ PARSE_BODY(decimal)
     {
         while (kigc++ < 3)
             kigit *= 10;
-        kint *kigp = (kint *) rt.allocate(sizeof(kint));
+        kint *kigp = (kint *) scr.allocate(sizeof(kint));
         if (!kigp)
             return ERROR;
         *kigp = kigit;
@@ -261,9 +270,9 @@ PARSE_BODY(decimal)
             bool  expneg = false;
             s = utf8_next(s);
             unicode sign = utf8_codepoint(s);
-            if (sign == '+' || sign == '-' || sign == L'⁻')
+            if (sign == '+' || sign == '-' || sign == U'⁻')
             {
-                expneg = sign == '-' || sign == L'⁻';
+                expneg = sign == '-' || sign == U'⁻';
                 s = utf8_next(s);
             }
             bool expok = false;
@@ -372,8 +381,8 @@ RENDER_BODY(decimal)
 
     static uint16_t fancy_digit[10] =
     {
-        L'⁰', L'¹', L'²', L'³', L'⁴',
-        L'⁵', L'⁶', L'⁷', L'⁸', L'⁹'
+        U'⁰', U'¹', U'²', U'³', U'⁴',
+        U'⁵', U'⁶', U'⁷', U'⁸', U'⁹'
     };
 
     // Emit sign if necessary
@@ -665,7 +674,7 @@ RENDER_BODY(decimal)
                 for (char *ptr = expbuf; ptr < end; ptr++)
                 {
                     char c = *ptr;
-                    unicode u = c == '-' ? L'⁻' : fancy_digit[c - '0'];
+                    unicode u = c == '-' ? U'⁻' : fancy_digit[c - '0'];
                     r.put(u);
                 }
             }
@@ -702,7 +711,7 @@ ularge decimal::as_unsigned(bool magnitude) const
 
     // If we overflow in the computation, return a "maxint"
     if (exp >= 19)
-        return ~0UL;
+        return ~0ULL;
 
     ularge xp  = exp;
     ularge pow = 1;
@@ -737,11 +746,36 @@ large decimal::as_integer() const
 // ----------------------------------------------------------------------------
 {
     large result = (large) as_unsigned(true);
-    if (result == ~0L)
-        result = 0x7FFFFFFFFFFFFFFFL;
+    if (result == ~0LL)
+        result = 0x7FFFFFFFFFFFFFFFLL;
     if (type() == ID_neg_decimal)
         result = -result;
     return result;
+}
+
+
+bool decimal::is_integral() const
+// ----------------------------------------------------------------------------
+//   Check if a decimal value has no fractional part
+// ----------------------------------------------------------------------------
+{
+    info   s       = shape();
+    large  exp     = s.exponent;
+    size_t nkigits = s.nkigits;
+    byte_p bp      = s.base;
+    for (size_t m = 0; m < nkigits; m++)
+    {
+        kint d = kigit(bp, m);
+        if (!d)
+            continue;
+        // Power of ten of the lowest digit of this kigit
+        large low = exp - 3 * large(m + 1);
+        if (low >= 0)
+            continue;
+        if (low < -2 || d % (low == -1 ? 10 : 100))
+            return false;
+    }
+    return true;
 }
 
 
@@ -751,7 +785,7 @@ int32_t decimal::as_int32() const
 // ----------------------------------------------------------------------------
 {
     large result = (large) as_unsigned(true);
-    if (result == ~0L || result >= 0x80000000L)
+    if (result == ~0LL || result >= 0x80000000LL)
         result = 0x7FFFFFFF;
     if (type() == ID_neg_decimal)
         result = -result;
@@ -786,7 +820,7 @@ decimal_p decimal::from_bignum(bignum_p valuep)
     decimal_g digits;
     large     exp    = 0;
     bignum_g  value  = valuep;
-    bignum_g  div    = bignum::make(1000000000000UL);
+    bignum_g  div    = bignum::make(1000000000000ULL);
     bignum_g  kigit;
 
     while (!value->is_zero())
@@ -816,7 +850,7 @@ decimal_p decimal::from_random_seed(bignum_p valuep)
     decimal_g digits;
     large     exp    = 0;
     bignum_g  value  = valuep;
-    bignum_g  div    = bignum::make(1000000000000UL);
+    bignum_g  div    = bignum::make(1000000000000ULL);
     bignum_g  kigit;
 
     while (!value->is_zero())
@@ -998,7 +1032,7 @@ decimal_p decimal::truncate(large to_exp) const
             else if (rm == 2)
                 k -= k % 10;
         }
-        kint *kp = (kint *) rt.allocate(sizeof(kint));
+        kint *kp = (kint *) scr.allocate(sizeof(kint));
         if (!kp)
             return nullptr;
         *kp = k;
@@ -1073,7 +1107,7 @@ decimal_p decimal::round(large to_exp) const
                 break;
             }
         }
-        kint *kp = (kint *) rt.allocate(sizeof(kint));
+        kint *kp = (kint *) scr.allocate(sizeof(kint));
         if (!kp)
             return nullptr;
         *kp = k;
@@ -1153,7 +1187,7 @@ bool decimal::split(decimal_g &ip, decimal_g &fp, large to_exp) const
             }
             k -= rest;
         }
-        kint *kp = (kint *) rt.allocate(sizeof(kint));
+        kint *kp = (kint *) scr.allocate(sizeof(kint));
         if (!kp)
             return false;
         *kp = k;
@@ -1162,7 +1196,7 @@ bool decimal::split(decimal_g &ip, decimal_g &fp, large to_exp) const
     for (size_t i = copy; i < nkigits; i++)
     {
         kint k = i == copy ? rest : kigit(+bp, i);
-        kint *kp = (kint *) rt.allocate(sizeof(kint));
+        kint *kp = (kint *) scr.allocate(sizeof(kint));
         if (!kp)
             return false;
         *kp = k;
@@ -1469,9 +1503,19 @@ int decimal::compare(decimal_r x, decimal_r y, uint epsilon)
     id   xty = x->type();
     id   yty = y->type();
 
-    // Check negative vs. positive
+    // Check negative vs. positive (-0 and 0 compare equal)
     if (xty != yty)
+    {
+        bool xz = x->is_zero();
+        bool yz = y->is_zero();
+        if (xz && yz)
+            return 0;
+        if (xz)
+            xty = yty == ID_decimal ? ID_neg_decimal : ID_decimal;
+        if (yz)
+            yty = xty == ID_decimal ? ID_neg_decimal : ID_decimal;
         return (xty == ID_decimal) - (yty == ID_decimal);
+    }
 
     // Read information from both numbers
     int  sign = xty == ID_neg_decimal ? -1 : 1;
@@ -1548,10 +1592,12 @@ static inline object::id negtype(object::id type)
 }
 
 
-decimal_p decimal::neg(decimal_r x)
+static decimal_p flip_sign(decimal_r x)
 // ----------------------------------------------------------------------------
-//   Negation
+//   Flip the sign of x, including for zero (internal use by add / subtract)
 // ----------------------------------------------------------------------------
+//   This may build a transient -0, which add() and subtract() rely on to
+//   dispatch correctly; any result they build is normalized to +0
 {
     if (!x)
         return nullptr;
@@ -1560,6 +1606,19 @@ decimal_p decimal::neg(decimal_r x)
     gcbytes data = x->payload();
     size_t len = x->size() - leb128size(type);
     return rt.make<decimal>(ntype, len, data);
+}
+
+
+decimal_p decimal::neg(decimal_r x)
+// ----------------------------------------------------------------------------
+//   Negation - There is no -0 in RPL, so negating zero gives zero
+// ----------------------------------------------------------------------------
+{
+    if (!x)
+        return nullptr;
+    if (x->is_zero())
+        return rt.make<decimal>(ID_decimal, 0, 0, gcp<kint>());
+    return flip_sign(x);
 }
 
 
@@ -1599,15 +1658,26 @@ decimal_p decimal::add(decimal_r x, decimal_r y)
     id xty = x->type();
     id yty = y->type();
     if (xty != yty)
-        return subtract(x, decimal_g(neg(y)));
+        return subtract(x, decimal_g(flip_sign(y)));
     add::remember(target<add>);
 
     // Read information from both numbers
     info  xi = x->shape();
     info  yi = y->shape();
+    bool  xz = xi.nkigits == 0;
+    bool  yz = yi.nkigits == 0;
     large xe = xi.exponent;
     large ye = yi.exponent;
     id    ty = x->type();
+
+    // A zero has no meaningful exponent, so it can't make y negligible
+    if (xe != ye)
+    {
+        if (xz)
+            xe = ye;
+        else if (yz)
+            ye = xe;
+    }
 
     // Put the smallest exponent in y
     bool lt = xe < ye;
@@ -1630,13 +1700,9 @@ decimal_p decimal::add(decimal_r x, decimal_r y)
     size_t   ps     = (Settings.Precision() + 2) / 3;
     size_t   rs     = std::min(ps, std::max(xs, ys + (yshift + 2) / 3));
 
-    // Check if y is negligible relative to x
-    if (rs < kshift)
-        return lt ? y : x;
-
     // Allocate the mantissa
     scribble scr;
-    kint    *rb = (kint *) rt.allocate(rs * sizeof(kint));
+    kint    *rb = (kint *) scr.allocate(rs * sizeof(kint));
     if (!rb)
         return nullptr;
 
@@ -1677,7 +1743,7 @@ decimal_p decimal::add(decimal_r x, decimal_r y)
         xe += expincr;
         if (rs < ps)
         {
-            rb = (kint *) rt.allocate(sizeof(kint)) - rs;
+            rb = (kint *) scr.allocate(sizeof(kint)) - rs;
             if (!rb)
                 return nullptr;
             rb[rs] = 0;
@@ -1714,18 +1780,29 @@ decimal_p decimal::subtract(decimal_r x, decimal_r y)
     id xty = x->type();
     id yty = y->type();
     if (xty != yty)
-        return add(x, decimal_g(neg(y)));
+        return add(x, decimal_g(flip_sign(y)));
     subtract::remember(target<subtract>);
 
     // Read information from both numbers
     info  xi = x->shape();
     info  yi = y->shape();
+    bool  xz = xi.nkigits == 0;
+    bool  yz = yi.nkigits == 0;
     large xe = xi.exponent;
     large ye = yi.exponent;
     id    ty = x->type();
-    bool  lt = xe < ye;
+
+    // A zero has no meaningful exponent, so it can't make y negligible
+    if (xe != ye)
+    {
+        if (xz)
+            xe = ye;
+        else if (yz)
+            ye = xe;
+    }
 
     // Put the smallest exponent in y
+    bool lt = xe < ye;
     if (lt)
     {
         std::swap(xe, ye);
@@ -1745,13 +1822,9 @@ decimal_p decimal::subtract(decimal_r x, decimal_r y)
     size_t   ps     = (Settings.Precision() + 2) / 3;
     size_t   rs     = std::min(ps, std::max(xs, ys + (yshift + 2) / 3));
 
-    // Check if y is negligible relative to x
-    if (rs < kshift)
-        return lt ? neg(y) : decimal_p(x);
-
     // Allocate the mantissa
     scribble scr;
-    kint    *rb = (kint *) rt.allocate(rs * sizeof(kint));
+    kint    *rb = (kint *) scr.allocate(rs * sizeof(kint));
     if (!rb)
         return nullptr;
 
@@ -1840,7 +1913,7 @@ decimal_p decimal::multiply(decimal_r x, decimal_r y)
 
     // Allocate the mantissa
     scribble scr;
-    kint    *rb = (kint *) rt.allocate(rs * sizeof(kint));
+    kint    *rb = (kint *) scr.allocate(rs * sizeof(kint));
     if (!rb)
         return nullptr;
 
@@ -1972,7 +2045,7 @@ decimal_p decimal::divide(decimal_r x, decimal_r y)
 
     // Allocate memory for the result
     scribble scr;
-    kint    *rp = (kint *) rt.allocate((rs + qs + xs + ys) * sizeof(kint));
+    kint    *rp = (kint *) scr.allocate((rs + qs + xs + ys) * sizeof(kint));
     if (!rp)
         return nullptr;
 
@@ -2141,7 +2214,43 @@ decimal_p decimal::pow(decimal_r x, decimal_r y)
     if (!x || !y)
         return nullptr;
     pow::remember(target<pow>);
+
+    // 0^y is 0 for y > 0 and a pole for y < 0 (0^0 is handled by caller)
+    if (x->is_zero())
+    {
+        if (y->is_negative())
+        {
+            rt.domain_error();
+            return nullptr;
+        }
+        return x;
+    }
+
     precision_adjust prec;
+    if (x->is_negative())
+    {
+        // Negative base: only defined in the reals for an integral exponent
+        // The caller may promote to complex when ComplexResults is set
+        decimal_g ip, fp;
+        if (!y->split(ip, fp))
+            return nullptr;
+        if (!fp->is_zero())
+        {
+            rt.domain_error();
+            return nullptr;
+        }
+        decimal_g two = make(2);
+        decimal_g half = y / two;
+        if (!half || !half->split(ip, fp))
+            return nullptr;
+        bool odd = !fp->is_zero();
+        decimal_g ax = x;
+        ax = -ax;
+        decimal_g r = exp(y * ln(ax));
+        if (odd)
+            r = -r;
+        return prec(r);
+    }
     return prec(exp(y * ln(x)));
 }
 
@@ -2680,12 +2789,25 @@ decimal_p decimal::sinh(decimal_r x)
 // ----------------------------------------------------------------------------
 //    Hyperbolic sine
 // ----------------------------------------------------------------------------
+//    Use sinh(|x|) = (e + e/(e+1)) / 2 with e = expm1(|x|), which does not
+//    cancel for small |x| like (exp(x) - exp(-x)) / 2 does
 {
+    if (!x)
+        return nullptr;
     precision_adjust prec;
+    bool      neg  = x->is_negative();
+    decimal_g ax   = neg ? decimal_g(-x) : decimal_g(x);
     decimal_g half = make(5,-1);
-    decimal_g ep = exp(x);
-    decimal_g em = exp(-x);
-    return prec((ep - em) * half);
+    decimal_g one  = make(1);
+    decimal_g e    = expm1(ax);
+    if (!e)
+        return nullptr;
+    if (e->is_infinity())
+        return prec(neg ? decimal_g(-e) : e);
+    decimal_g r = (e + decimal_g(e / decimal_g(e + one))) * half;
+    if (neg)
+        r = -r;
+    return prec(r);
 }
 
 
@@ -2706,11 +2828,35 @@ decimal_p decimal::tanh(decimal_r x)
 // ----------------------------------------------------------------------------
 //   Hyperbolic tangent
 // ----------------------------------------------------------------------------
+//   Use tanh(|x|) = e / (e + 2) with e = expm1(2|x|), which is accurate for
+//   small |x|. For large |x|, tanh(x) rounds to ±1.
 {
+    if (!x)
+        return nullptr;
     precision_adjust prec;
-    decimal_g hs = sinh(x);
-    decimal_g hc = cosh(x);
-    return prec(hs / hc);
+    bool      neg = x->is_negative();
+    decimal_g ax  = neg ? decimal_g(-x) : decimal_g(x);
+    decimal_g one = make(1);
+    decimal_g r;
+
+    // 1 - tanh(x) ≈ 2·exp(-2x) < 10^-(prec+3) when x > 1.2 * (prec+3)
+    decimal_g big = make(large(prec) + 3);
+    big = big + big;
+    if (!big)
+        return nullptr;
+    if (ax > big)
+    {
+        r = one;
+    }
+    else
+    {
+        decimal_g two = make(2);
+        decimal_g e   = expm1(decimal_g(ax + ax));
+        r = e / decimal_g(e + two);
+    }
+    if (r && neg)
+        r = -r;
+    return prec(r);
 }
 
 
@@ -2719,9 +2865,35 @@ decimal_p decimal::asinh(decimal_r x)
 //  Inverse hyperbolic sine
 // ----------------------------------------------------------------------------
 {
+    if (!x)
+        return nullptr;
+    if (x->is_zero())
+        return x;
+
     precision_adjust prec;
+    bool      neg = x->is_negative();
+    decimal_g ax  = neg ? decimal_g(-x) : decimal_g(x);
     decimal_g one = make(1);
-    return prec(ln(x + decimal_g(sqrt(x*x + one))));
+    decimal_g r;
+
+    if (ax->exponent() > large(prec) + 3)
+    {
+        // Huge |x|: asinh(|x|) = ln(2|x|) since x² + 1 rounds to x²
+        decimal_g ln2 = constants().ln2();
+        r = ln(ax);
+        r = r + ln2;
+    }
+    else
+    {
+        // asinh(|x|) = ln1p(|x| + x² / (1 + √(x² + 1))), accurate near 0
+        decimal_g sq = ax * ax;
+        decimal_g root = sqrt(decimal_g(sq + one));
+        root = root + one;
+        r = ln1p(decimal_g(ax + decimal_g(sq / root)));
+    }
+    if (r && neg)
+        r = -r;
+    return prec(r);
 }
 
 
@@ -2741,10 +2913,27 @@ decimal_p decimal::atanh(decimal_r x)
 //   Inverse hyperbolic tangent
 // ----------------------------------------------------------------------------
 {
+    if (!x)
+        return nullptr;
+    if (x->is_zero())
+        return x;
+
+    // atanh(x) = ln1p(2x / (1 - x)) / 2, accurate for small x
     precision_adjust prec;
-    decimal_g one = make(1);
+    decimal_g one  = make(1);
+    decimal_g d    = one - x;
+    if (!d)
+        return nullptr;
+    if (d->is_zero())
+    {
+        rt.domain_error();
+        return nullptr;
+    }
     decimal_g half = make(5, -1);
-    return prec(half * ln((one + x) / (one - x)));
+    decimal_g r    = x + x;
+    r = r / d;
+    r = ln1p(r);
+    return prec(half * r);
 }
 
 
@@ -2754,7 +2943,14 @@ decimal_p decimal::csch(decimal_r x)
 // ----------------------------------------------------------------------------
 {
     precision_adjust prec;
-    decimal_g s = sinh(x);
+    decimal_g        s = sinh(x);
+    if (!s)
+        return nullptr;
+    if (s->is_zero())
+    {
+        rt.domain_error();
+        return nullptr;
+    }
     return prec(inv(s));
 }
 
@@ -2766,6 +2962,13 @@ decimal_p decimal::sech(decimal_r x)
 {
     precision_adjust prec;
     decimal_g c = cosh(x);
+    if (!c)
+        return nullptr;
+    if (c->is_zero())
+    {
+        rt.domain_error();
+        return nullptr;
+    }
     return prec(inv(c));
 }
 
@@ -2776,9 +2979,15 @@ decimal_p decimal::coth(decimal_r x)
 // ----------------------------------------------------------------------------
 {
     precision_adjust prec;
-    decimal_g s = sinh(x);
-    decimal_g c = cosh(x);
-    return prec(c / s);
+    decimal_g        t = tanh(x);
+    if (!t)
+        return nullptr;
+    if (t->is_zero())
+    {
+        rt.domain_error();
+        return nullptr;
+    }
+    return prec(inv(t));
 }
 
 
@@ -2787,10 +2996,18 @@ decimal_p decimal::acsch(decimal_r x)
 //   Inverse hyperbolic cosecant
 // ----------------------------------------------------------------------------
 {
+    if (!x)
+        return nullptr;
+    if (x->is_zero())
+    {
+        rt.domain_error();
+        return nullptr;
+    }
     precision_adjust prec;
-    decimal_g one = make(1);
     decimal_g inv_x = inv(x);
-    return prec(ln(inv_x + decimal_g(sqrt(inv_x*inv_x + one))));
+    if (!inv_x)
+        return nullptr;
+    return prec(asinh(inv_x));
 }
 
 

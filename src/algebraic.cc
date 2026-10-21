@@ -44,6 +44,7 @@
 #include "functions.h"
 #include "hwfp.h"
 #include "integer.h"
+#include "library.h"
 #include "object.h"
 #include "parser.h"
 #include "range.h"
@@ -53,6 +54,7 @@
 #include "tag.h"
 #include "unit.h"
 #include "user_interface.h"
+#include "variables.h"
 
 #include <cctype>
 #include <cmath>
@@ -648,11 +650,13 @@ algebraic_p algebraic::symbolic_sqrt() const
             return rectangular::make(integer::make(0), x);
         }
 
+        // Only values that fit in 64 bits can be factored natively
         if (integer_p i = x->as<integer>())
             return integer_sqrt(i->value<ularge>());
         if (bignum_p b = x->as<bignum>())
-            return integer_sqrt(b->value<ularge>());
-        if (x->is_fraction())
+            if (!b->more_bits_than(64))
+                return integer_sqrt(b->value<ularge>());
+        if (x->type() == ID_fraction)
         {
             fraction_p f = fraction_p(+x);
             ularge num = f->numerator_value();
@@ -978,6 +982,62 @@ static algebraic_p to_decimal_weak(algebraic_r x)
 }
 
 
+static bool is_inert_symbolic(expression_p eq)
+// ----------------------------------------------------------------------------
+//   Check if numerical evaluation would leave an expression unchanged
+// ----------------------------------------------------------------------------
+//   This is the case for sums and products of undefined names.
+//   Detecting this avoids re-evaluating the left argument of every addition
+//   in a sum, which made the numerical evaluation of `A1+A2+...+An`
+//   exponential in n.
+{
+    for (object_p obj : *eq)
+    {
+        switch (obj->type())
+        {
+        case object::ID_add:
+        case object::ID_subtract:
+        case object::ID_multiply:
+        case object::ID_neg:
+            break;
+        case object::ID_symbol:
+            if (directory::recall_all(obj, false))
+                return false;
+            if (Settings.AutomaticXLibs())
+            {
+                symbol_p sym = symbol_p(obj);
+                size_t len = 0;
+                utf8 txt = sym->value(&len);
+                byte buffer[64];
+                if (len <= sizeof(buffer))
+                {
+                    memcpy(buffer, txt, len);
+                    if (xlib::lookup(buffer, len, false))
+                        return false;
+                }
+            }
+            if (Settings.AutomaticConstants())
+            {
+                symbol_p sym = symbol_p(obj);
+                size_t len = 0;
+                utf8 txt = sym->value(&len);
+                byte buffer[64];
+                if (len <= sizeof(buffer))
+                {
+                    memcpy(buffer, txt, len);
+                    if (constant::lookup(buffer, len, false))
+                        return false;
+                }
+            }
+            break;
+        default:
+            return false;
+        }
+    }
+    return true;
+}
+
+
 bool algebraic::to_decimal(algebraic_g &x, bool weak)
 // ----------------------------------------------------------------------------
 //   Convert a value to decimal
@@ -1086,6 +1146,8 @@ bool algebraic::to_decimal(algebraic_g &x, bool weak)
     case ID_expression:
         if (!unit::mode)
         {
+            if (xt == ID_expression && is_inert_symbolic(expression_p(+x)))
+                return true;
             algebraic_p eq = algebraic_p(+x);
             settings::SaveNumericalResults save(true);
             x = eq->evaluate();
@@ -1302,6 +1364,8 @@ algebraic_p algebraic::convert_angle(algebraic_r ra,
 //   Otherwise, input is in fractions of pi (internal format for y() in polar).
 {
     algebraic_g a = ra;
+    if (!a)
+        return nullptr;
     if (a->is_real() && (from != to || negmod))
     {
         switch (from)
@@ -1409,6 +1473,7 @@ algebraic_p algebraic::evaluate_function(program_r eq, algebraic_r x)
 //   - Something that evaluates using the indep and returns it on the stack,
 //     for example 'X + 1' (assuming X is the independent variable)
 {
+    cleaner purge;
     stack_depth_restore sdr;
     if (!rt.push(+x))
         return nullptr;
@@ -1418,7 +1483,7 @@ algebraic_p algebraic::evaluate_function(program_r eq, algebraic_r x)
     if (err != OK)
         return nullptr;
 
-    object_p result = rt.pop();
+    algebraic_g result = algebraic_p(rt.pop());
     if (!result)
         return nullptr;
 
@@ -1443,7 +1508,9 @@ algebraic_p algebraic::evaluate_function(program_r eq, algebraic_r x)
         return nullptr;
     }
 
-    return algebraic_p(result);
+    if (+result != +x)
+        result = purge(result);
+    return result;
 }
 
 
@@ -1454,6 +1521,7 @@ algebraic_p algebraic::evaluate_function(program_r   eq,
 //   Evaluate the eq object as a function of two variables
 // ----------------------------------------------------------------------------
 {
+    cleaner purge;
     stack_depth_restore sdr;
     if (!rt.push(+x) || !rt.push(+y))
         return nullptr;
@@ -1464,7 +1532,7 @@ algebraic_p algebraic::evaluate_function(program_r   eq,
     if (err != OK)
         return nullptr;
 
-    object_p result = rt.pop();
+    algebraic_g result = algebraic_p(rt.pop());
     if (!result)
         return nullptr;
 
@@ -1489,7 +1557,10 @@ algebraic_p algebraic::evaluate_function(program_r   eq,
         rt.type_error();
         return nullptr;
     }
-    return algebraic_p(result);
+
+    if (+result != +x && +result != +y)
+        result = purge(result);
+    return result;
 }
 
 
@@ -1596,7 +1667,7 @@ bool algebraic::list_result(uint depth, bool reverse)
     for (uint d = 0; d < depth; d++)
     {
         object_p obj = rt.stack(reverse ? depth + ~d : d);
-        if (!obj || !rt.append(obj))
+        if (!obj || !scr.append(obj))
             return false;
     }
     list_p result = list::make(ID_list, scr.scratch(), scr.growth());

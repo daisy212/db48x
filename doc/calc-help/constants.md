@@ -1,9 +1,55 @@
-# Constants library
+mple # Constants library
 
 The DB48X calculator features a library of constants covering mathematics,
 physics, chemistry, astronomy, materials science and computer science.
 The built-in constants can be extended using the `config/constants.csv`
 configuration file.
+
+## Configuration file
+
+Using the `config/constants.csv` file, users can add their own constants,
+or overrule built in constants.
+
+The first column is interpreted as either:
+* a menu label (when there is no second column);
+* a constant name.
+
+The second column is interpreted as the constant value.
+
+A hierarchy of menus is created by using a forward slash as separator between
+the levels in the menu label.
+
+```
+"Dates"
+
+"Dates/America"
+"IndigenousPeoplesDay",		"14921012_date"
+```
+
+Only the deepest menu level may contain constants.
+Constants on intermediate levels are ignored.
+
+
+The constant value can be a single value, as above, or an array containing:
+* value;
+* standard uncertainty;
+* relative uncertainty;
+* optionally a label (defaults to the value).
+
+```
+"Sample"
+
+"C1",	"[ 3 0.5 0.16667 aLabel ]"
+"C2",	"[ '1+2' 0.5 1/6 ]"
+"C3",	"[ v sv 'sv / v' ]"
+```
+
+As shown in the example above, algebraic expressions can be used, which may
+refer to other constants, as long as definitions are not circular. Although you
+can have user-defined variables in a constant definition, this is not
+recommended, in particular because for performance reasons the calculator will
+cache the value of constants on first use.
+
 
 ## Mathematics constants
 
@@ -994,6 +1040,14 @@ Mercury gravitational parameter
 
 It is measured by radio tracking of spacecraft (Mariner 10, MESSENGER). [Reference 4](#reference-4)
 
+### M☿ constant
+
+Mercury mass
+
+Mercury's mass, derived from the gravitational parameter `GM☿` and the measured
+gravitational constant `G` as `GM☿/G`. The relative uncertainty is carried as
+`ⓇG` (the dominant term), so the mass self-corrects whenever `G` is updated. [Reference 4](#reference-4) [Reference 5](#reference-5)
+
 ### Req☿ constant
 
 Mercury equatorial radius
@@ -1044,6 +1098,13 @@ Mercury's sidereal rotation period is a measured quantity. It is the true time
 it takes to spin 360° on its axis. Mercury is in a 3:2 spin-orbit resonance with
 the Sun, rotating three times for every two orbits. [Reference 22](#reference-22)
 
+### ωrot☿ constant
+
+Mercury rotation angular velocity
+
+Mercury's sidereal rotation angular velocity, computed as `2π/Prot☿` from the
+sidereal rotation period. The unit is radians per second (`r/s`). [Reference 22](#reference-22)
+
 ### ϵ☿ constant
 
 Mercury axial tilt
@@ -1091,14 +1152,27 @@ It is the measured angle between the ascending node (where the orbit crosses
 the reference plane northward) and the perihelion (the closest point to the
 Sun), measured in the direction of motion. [Reference 23](#reference-23)
 
+### Porb☿ constant
+
+Mercury orbital period
+
+Mercury's sidereal orbital period — the time to complete one revolution around
+the Sun. It is distinct from the rotation period `Prot☿` (the spin period).
+Computed from Meeus' Chapter 38 orbital elements and cross-checked against JPL
+Horizons. The stored value is a mean orbital period, used as an approximation of
+the anomalistic period that governs the recurrence of the perihelion passages
+exposed by `T₀☿`. [Reference 27](#reference-27) [Reference 23](#reference-23)
+
 ### T₀☿ constant
 
-Mercury last perihelion passage
+Mercury time of perihelion passage
 
-Mercury's most recent time of perihelion passage is a measured quantity.
-Mercury passes perihelion approximately four times per year. Value in JDN
-(Julian Day Number, Gregorian calendar). It is the most recent point in its
-orbit when it was closest to the Sun. [Materials 20](#materials-20)
+Computed, not stored: `T₀☿` evaluates an expression (IFTE) that advances from a
+reference perihelion passage (Tp) by whole orbital periods (`Porb☿`) and returns
+the most recent perihelion passage at or before the current date. The
+computation is carried out in Julian Day Number and converted to a date with
+`JDN→`, so the constant displays as a date but tracks "now". Mercury passes
+perihelion roughly four times per year. [Reference 27](#reference-27)
 
 
 ## Venus constants
@@ -1109,6 +1183,14 @@ Venus gravitational parameter
 
 Venus's gravitational parameter, measured by radio tracking of spacecraft
 (Magellan, Venus Express). [Reference 4](#reference-4)
+
+### M♀ constant
+
+Venus mass
+
+Venus's mass, derived from the gravitational parameter `GM♀` and the measured
+gravitational constant `G` as `GM♀/G`. The relative uncertainty is carried as
+`ⓇG` (the dominant term), so the mass self-corrects whenever `G` is updated. [Reference 4](#reference-4) [Reference 5](#reference-5)
 
 ### Req♀ constant
 
@@ -1161,6 +1243,15 @@ Measured. Venus's sidereal rotation period is the true time it takes to spin 360
 on its axis. Venus rotates retrograde (opposite to its orbital motion), with a
 rotation period longer than its orbital period. [Reference 22](#reference-22)
 
+### ωrot♀ constant
+
+Venus rotation angular velocity
+
+Venus's sidereal rotation angular velocity, computed as `2π/Prot♀` from the
+sidereal rotation period. The value is negative because Venus rotates retrograde
+(opposite to its orbital motion); the uncertainty uses the positive magnitude.
+The unit is radians per second (`r/s`). [Reference 22](#reference-22)
+
 ### ϵ♀ constant
 
 Venus axial tilt
@@ -1205,13 +1296,26 @@ It is the measured angle between the ascending node (where the orbit crosses
 the reference plane northward) and the perihelion (the closest point to the Sun),
 measured in the direction of motion. [Reference 23](#reference-23)
 
+### Porb♀ constant
+
+Venus orbital period
+
+Venus's sidereal orbital period — the time to complete one revolution around the
+Sun. It is distinct from the rotation period `Prot♀` (the spin period). Computed
+from Meeus' Chapter 38 orbital elements and cross-checked against JPL Horizons.
+The stored value is a mean orbital period, used as an approximation of the
+anomalistic period that governs the recurrence of the perihelion passages
+exposed by `T₀♀`. [Reference 27](#reference-27) [Reference 23](#reference-23)
+
 ### T₀♀ constant
 
-Venus last perihelion passage
+Venus time of perihelion passage
 
-Measured. Venus's most recent time of perihelion passage. Venus passes perihelion
-approximately twice per year. Value in JDN. It is the most recent point in its
-orbit when it was closest to the Sun. [Materials 20](#materials-20)
+Computed, not stored: `T₀♀` evaluates an expression (IFTE) that advances from a
+reference perihelion passage (Tp) by whole orbital periods (`Porb♀`) and returns
+the most recent perihelion passage at or before the current date. The
+computation is carried out in Julian Day Number and converted to a date with
+`JDN→`. Venus passes perihelion about twice per year. [Reference 27](#reference-27)
 
 
 ## Earth constants
@@ -1222,6 +1326,14 @@ Earth gravitational parameter
 
 Exact nominal value (IAU 2015). Earth's gravitational parameter. An exact nominal
 value defined by the IAU (2015). [Particle Data Group 2023](#particle-data-group-2023)
+
+### M♁ constant
+
+Earth mass
+
+Earth's mass, derived from the gravitational parameter `GM♁` and the measured
+gravitational constant `G` as `GM♁/G`. The relative uncertainty is carried as
+`ⓇG` (the dominant term), so the mass self-corrects whenever `G` is updated. [Particle Data Group 2023](#particle-data-group-2023) [Reference 5](#reference-5)
 
 ### Req♁ constant
 
@@ -1274,6 +1386,13 @@ Earth sidereal rotation period
 Measured. Earth's sidereal rotation period (one sidereal day), the time for one
 rotation relative to the fixed stars. [Reference 24](#reference-24)
 
+### ωrot♁ constant
+
+Earth rotation angular velocity
+
+Earth's sidereal rotation angular velocity, computed as `2π/Prot♁` from the
+sidereal rotation period. The unit is radians per second (`r/s`). [Reference 24](#reference-24)
+
 ### ϵ♁ constant
 
 Earth axial tilt
@@ -1324,13 +1443,93 @@ It is the measured angle between the ascending node (where the orbit crosses
 the reference plane northward) and the perihelion (the closest point to the
 Sun), measured in the direction of motion. [Reference 23](#reference-23)
 
+### Porb♁ constant
+
+Earth orbital period
+
+Earth's sidereal orbital period — the time to complete one revolution around the
+Sun. It is distinct from the rotation period `Prot♁` (the sidereal day). Computed
+from Meeus' Chapter 38 orbital elements and cross-checked against JPL Horizons.
+The stored value is the mean (anomalistic) year used to advance `T₀♁` between
+successive perihelion passages. [Reference 27](#reference-27) [Reference 23](#reference-23)
+
 ### T₀♁ constant
 
-Earth perihelion passage
+Earth time of perihelion passage
 
-Measured. Earth's most recent time of perihelion passage (early January each
-year). Value in JDN. It is the most recent point in its orbit when it was
-closest to the Sun. [Materials 20](#materials-20)
+Computed, not stored: `T₀♁` evaluates an expression (IFTE) that advances from a
+reference perihelion passage (Tp) by whole orbital periods (`Porb♁`, the
+anomalistic year) and returns the most recent perihelion passage at or before
+the current date (early January each year). The computation is carried out in
+Julian Day Number and converted to a date with `JDN→`. [Reference 27](#reference-27)
+
+
+### a♁GPS constant
+
+Earth equatorial radius (WGS-84)
+
+The semi-major axis of the WGS-84 reference ellipsoid, a defining constant of the
+World Geodetic System 1984 used by GPS. Exact by definition. [WGS-84](#wgs-84)
+
+### f♁GPS constant
+
+Earth flattening (WGS-84)
+
+The flattening of the WGS-84 reference ellipsoid, `1/298.257223563`, a defining
+constant. Exact by definition. [WGS-84](#wgs-84)
+
+### ω♁GPS constant
+
+Earth nominal mean angular velocity (WGS-84)
+
+The nominal mean angular velocity of the Earth in the WGS-84 system. Exact by
+definition, and distinct from the sidereal value `ωrot♁` derived from `Prot♁`. [WGS-84](#wgs-84)
+
+### GM♁GPS constant
+
+Earth gravitational parameter (WGS-84)
+
+The geocentric gravitational constant of the WGS-84 system, including the mass of
+the Earth's atmosphere. Exact by definition, and distinct from the IAU nominal
+`GM♁`. [WGS-84](#wgs-84)
+
+### e12♁GPS constant
+
+Earth first eccentricity squared (WGS-84)
+
+The square of the first eccentricity of the WGS-84 reference ellipsoid, computed
+from the flattening as `2·f♁GPS−f♁GPS²`. This is an ellipsoid (shape) eccentricity,
+not the orbital eccentricity `e♁`. [WGS-84](#wgs-84)
+
+### e22♁GPS constant
+
+Earth second eccentricity squared (WGS-84)
+
+The square of the second eccentricity of the WGS-84 reference ellipsoid, computed
+from the first as `e12♁GPS/(1−e12♁GPS)`. An ellipsoid eccentricity, distinct from
+the orbital eccentricity `e♁`. [WGS-84](#wgs-84)
+
+### Ytrop♁ constant
+
+Tropical year
+
+The tropical (seasonal) year, equinox to equinox, about 365.24219 days at J2000.
+It is distinct from `Porb♁` (the anomalistic year, perihelion to perihelion, used
+by `T₀♁`) and from the calendar years `YJul♁` and `YGreg♁`. [Reference 24](#reference-24)
+
+### YJul♁ constant
+
+Julian year
+
+The Julian year, exactly 365.25 days. It is the year used to define the
+light-year. [Reference 24](#reference-24)
+
+### YGreg♁ constant
+
+Gregorian mean year
+
+The mean year of the Gregorian calendar, exactly 365.2425 days
+(365 + 1/4 − 1/100 + 1/400). [Reference 24](#reference-24)
 
 
 ## Moon constants
@@ -1341,6 +1540,14 @@ Moon gravitational parameter
 
 Measured. Moon's gravitational parameter, measured by lunar laser ranging
 and spacecraft radio tracking. [Reference 4](#reference-4)
+
+### M☽ constant
+
+Moon mass
+
+The Moon's mass, derived from the gravitational parameter `GM☽` and the measured
+gravitational constant `G` as `GM☽/G`. The relative uncertainty is carried as
+`ⓇG` (the dominant term), so the mass self-corrects whenever `G` is updated. [Reference 4](#reference-4) [Reference 5](#reference-5)
 
 ### Req☽ constant
 
@@ -1393,6 +1600,14 @@ Measured. Moon's sidereal rotation period is the true time it takes to spin
 360° on its axis. The Moon is tidally locked to Earth, so its rotation period
 equals its orbital period. [Reference 22](#reference-22)
 
+### ωrot☽ constant
+
+Moon rotation angular velocity
+
+The Moon's sidereal rotation angular velocity, computed as `2π/Prot☽` from the
+sidereal rotation period. Because the Moon is tidally locked, this equals its
+orbital mean motion. The unit is radians per second (`r/s`). [Reference 22](#reference-22)
+
 ### ϵ☽ constant
 
 Moon axial tilt
@@ -1439,14 +1654,35 @@ Moon argument of perigee
 Measured. Moon's argument of perigee. It is the most recent point in its
 orbit when it was closest to the Earth. [Reference 25](#reference-25)
 
+### Porb☽ constant
+
+Moon orbital period
+
+The Moon's anomalistic month — the mean interval between successive perigee
+passages (about 27.55 days). It is distinct from the rotation period `Prot☽` and
+from the sidereal month. Its absolute uncertainty (±1.12 days) is the measured 1σ
+spread of real perigee-to-perigee intervals over 2000–2050, made large by the
+solar perturbation; this variability is why the Moon differs from the planets.
+The value is the standard anomalistic month used by `ⓁPeriSel`. [Reference 27](#reference-27)
+
 ### T₀☽ constant
 
-Moon perigee passage
+Moon time of perigee passage
 
-Calculated from measurement (Meeus ch.50, ±1 hour). See MPERC.txt. Moon's
-most recent time of perigee passage (closest approach to Earth). The perigee
-recurs approximately every 27.55 days. Computed using the Meeus algorithm
-(15 terms, ±1 hour accuracy). Value in JDN. [Materials 20](#materials-20) [Materials 22](#materials-22)
+Computed, not stored: `T₀☽` evaluates `JDN→(ⓁPeriSel(→Num(JDN(DateTime))))`,
+calling the library routine `ⓁPeriSel` on the current date to obtain the nearest
+lunar perigee, then converting the Julian Day Number to a date. `ⓁPeriSel`
+implements Meeus' Chapter 50 perigee formula in full — all 60 Table 50.A periodic
+terms, including the time-dependent coefficients — and matches the PyMeeus
+reference implementation to better than 0.001 minute over 1950–2100. The accuracy
+of the perigee *instant* against the true Earth–Moon distance minimum is limited by
+the Chapter 50 method itself: about 5 minutes typical (1σ), up to ~30 minutes in
+rare cases; this is the basis for the ±5 minutes (`300_s`) uncertainty. `ⓁPeriSel`
+accepts either a date or a Julian Day Number as input. The perigee recurs about
+every 27.55 days (`Porb☽`). Validated against observed perigees: JDN 2457706.5 →
+2457706.974818 (2016-Nov-14, k=224) and 2464291.5 → 2464292.421948 (2034-Nov-25,
+k=463). Note: Meeus' worked example at p.357 (JDN 2447442.35) is an apogee, not a
+perigee, and must not be used to check this value. [Reference 27](#reference-27)
 
 
 ## Mars constants
@@ -1457,6 +1693,14 @@ Mars gravitational parameter
 
 Measured. Mars system gravitational parameter, including the contribution of
 its moons Phobos and Deimos, measured by spacecraft radio tracking. [Reference 4](#reference-4)
+
+### M♂ constant
+
+Mars mass
+
+Mars's mass, derived from the gravitational parameter `GM♂` and the measured
+gravitational constant `G` as `GM♂/G`. The relative uncertainty is carried as
+`ⓇG` (the dominant term), so the mass self-corrects whenever `G` is updated. [Reference 4](#reference-4) [Reference 5](#reference-5)
 
 ### Req♂ constant
 
@@ -1507,6 +1751,13 @@ Measured. Mars's sidereal rotation period is the true time it takes to spin
 360° on its axis. A Martian day (sol) is very similar in length to an Earth day.
 [Reference 22](#reference-22)
 
+### ωrot♂ constant
+
+Mars rotation angular velocity
+
+Mars's sidereal rotation angular velocity, computed as `2π/Prot♂` from the
+sidereal rotation period. The unit is radians per second (`r/s`). [Reference 22](#reference-22)
+
 ### ϵ♂ constant
 
 Mars axial tilt
@@ -1552,13 +1803,26 @@ It is the measured angle between the ascending node (where the orbit crosses
 the reference plane northward) and the perihelion (the closest point to the
 Sun), measured in the direction of motion. [Reference 23](#reference-23)
 
+### Porb♂ constant
+
+Mars orbital period
+
+Mars's sidereal orbital period — the time to complete one revolution around the
+Sun. It is distinct from the rotation period `Prot♂` (the spin period, close to
+an Earth day). Computed from Meeus' Chapter 38 orbital elements and cross-checked
+against JPL Horizons. The stored value is a mean orbital period, used as an
+approximation of the anomalistic period that governs the recurrence of the
+perihelion passages exposed by `T₀♂`. [Reference 27](#reference-27) [Reference 23](#reference-23)
+
 ### T₀♂ constant
 
-Mars perihelion passage
+Mars time of perihelion passage
 
-Measured. Mars's most recent time of perihelion passage. Mars's orbital
-period is approximately 1.88 years. Value in JDN. It is the most recent point
-in its orbit when it was closest to the Sun. [Materials 20](#materials-20)
+Computed, not stored: `T₀♂` evaluates an expression (IFTE) that advances from a
+reference perihelion passage (Tp) by whole orbital periods (`Porb♂`) and returns
+the most recent perihelion passage at or before the current date. The
+computation is carried out in Julian Day Number and converted to a date with
+`JDN→`. Mars's orbital period is approximately 1.88 years. [Reference 27](#reference-27)
 
 
 ## Jupiter constants
@@ -1569,6 +1833,14 @@ Jupiter gravitational parameter
 
 Exact nominal value (IAU 2015). Jupiter system gravitational parameter.
 An exact nominal value defined by the IAU (2015). [Particle Data Group 2023](#particle-data-group-2023)
+
+### M♃ constant
+
+Jupiter mass
+
+Jupiter's mass, derived from the gravitational parameter `GM♃` and the measured
+gravitational constant `G` as `GM♃/G`. The relative uncertainty is carried as
+`ⓇG` (the dominant term), so the mass self-corrects whenever `G` is updated. [Particle Data Group 2023](#particle-data-group-2023) [Reference 5](#reference-5)
 
 ### Req♃ constant
 
@@ -1623,6 +1895,13 @@ Measured. Jupiter's sidereal rotation period is the true time it takes to
 spin 360° on its axis (System III, based on radio emissions from its
 magnetosphere). [Reference 22](#reference-22)
 
+### ωrot♃ constant
+
+Jupiter rotation angular velocity
+
+Jupiter's sidereal rotation angular velocity, computed as `2π/Prot♃` from the
+sidereal rotation period (System III). The unit is radians per second (`r/s`). [Reference 22](#reference-22)
+
 ### ϵ♃ constant
 
 Jupiter axial tilt
@@ -1670,13 +1949,25 @@ It is the measured angle between the ascending node (where the orbit
 crosses the reference plane northward) and the perihelion (the closest
 point to the Sun), measured in the direction of motion. [Reference 23](#reference-23)
 
+### Porb♃ constant
+
+Jupiter orbital period
+
+Jupiter's orbital period — the time to complete one revolution around the Sun
+(about 11.86 years). It is distinct from the rotation period `Prot♃` (the ~10 h
+spin period). The value is the anomalistic period (perihelion to perihelion),
+computed from Meeus' Chapter 38, which governs the recurrence of the perihelion
+passages exposed by `T₀♃`. [Reference 27](#reference-27)
+
 ### T₀♃ constant
 
-Jupiter perihelion passage
+Jupiter time of perihelion passage
 
-Measured. Jupiter's most recent time of perihelion passage. Jupiter's
-orbital period is approximately 11.86 years. It is the most recent point
-in its orbit when it was closest to the Sun. Value in JDN. [Reference 4](#reference-4) [Materials 21](#materials-21)
+Computed, not stored: `T₀♃` evaluates an expression (IFTE) that advances from a
+reference perihelion passage (Tp) by whole orbital periods (`Porb♃`) and returns
+the most recent perihelion passage at or before the current date. The
+computation is carried out in Julian Day Number and converted to a date with
+`JDN→`. Jupiter's orbital period is approximately 11.86 years. [Reference 27](#reference-27)
 
 
 ## Saturn constants
@@ -1687,6 +1978,14 @@ Saturn gravitational parameter
 
 Measured. Saturn system gravitational parameter, measured by radio
 tracking of the Cassini spacecraft. [Reference 4](#reference-4)
+
+### M♄ constant
+
+Saturn mass
+
+Saturn's mass, derived from the gravitational parameter `GM♄` and the measured
+gravitational constant `G` as `GM♄/G`. The relative uncertainty is carried as
+`ⓇG` (the dominant term), so the mass self-corrects whenever `G` is updated. [Reference 4](#reference-4) [Reference 5](#reference-5)
 
 ### Req♄ constant
 
@@ -1740,6 +2039,13 @@ Measured. Saturn's sidereal rotation period is the true time it takes
 to spin 360° on its axis (System III, based on Cassini radio
 measurements). [Reference 22](#reference-22)
 
+### ωrot♄ constant
+
+Saturn rotation angular velocity
+
+Saturn's sidereal rotation angular velocity, computed as `2π/Prot♄` from the
+sidereal rotation period (System III). The unit is radians per second (`r/s`). [Reference 22](#reference-22)
+
 ### ϵ♄ constant
 
 Saturn axial tilt
@@ -1787,13 +2093,25 @@ It is the measured angle between the ascending node (where the orbit
 crosses the reference plane northward) and the perihelion (the closest
 point to the Sun), measured in the direction of motion. [Reference 23](#reference-23)
 
+### Porb♄ constant
+
+Saturn orbital period
+
+Saturn's orbital period — the time to complete one revolution around the Sun
+(about 29.46 years). It is distinct from the rotation period `Prot♄` (the ~10.7 h
+spin period). The value is the anomalistic period (perihelion to perihelion),
+computed from Meeus' Chapter 38, which governs the recurrence of the perihelion
+passages exposed by `T₀♄`. [Reference 27](#reference-27)
+
 ### T₀♄ constant
 
-Saturn perihelion passage
+Saturn time of perihelion passage
 
-Measured. Saturn's most recent time of perihelion passage. Saturn's
-orbital period is approximately 29.46 years. It is the most recent point
-in its orbit when it was closest to the Sun. Value in JDN. [Reference 4](#reference-4) [Materials 21](#materials-21)
+Computed, not stored: `T₀♄` evaluates an expression (IFTE) that advances from a
+reference perihelion passage (Tp) by whole orbital periods (`Porb♄`) and returns
+the most recent perihelion passage at or before the current date. The
+computation is carried out in Julian Day Number and converted to a date with
+`JDN→`. Saturn's orbital period is approximately 29.46 years. [Reference 27](#reference-27)
 
 
 ## Uranus constants
@@ -1804,6 +2122,14 @@ Uranus gravitational parameter
 
 Measured. Uranus system gravitational parameter, measured by Voyager
 2 radio tracking. [Reference 4](#reference-4)
+
+### M⛢ constant
+
+Uranus mass
+
+Uranus's mass, derived from the gravitational parameter `GM⛢` and the measured
+gravitational constant `G` as `GM⛢/G`. The relative uncertainty is carried as
+`ⓇG` (the dominant term), so the mass self-corrects whenever `G` is updated. [Reference 4](#reference-4) [Reference 5](#reference-5)
 
 ### Req⛢ constant
 
@@ -1856,6 +2182,15 @@ Measured. Uranus's sidereal rotation period is the true time it takes
 to spin 360° on its axis. Uranus rotates retrograde relative to its
 orbital motion. [Reference 22](#reference-22)
 
+### ωrot⛢ constant
+
+Uranus rotation angular velocity
+
+Uranus's sidereal rotation angular velocity, computed as `2π/Prot⛢` from the
+sidereal rotation period. The value is negative because Uranus rotates retrograde
+relative to its orbital motion; the uncertainty uses the positive magnitude. The
+unit is radians per second (`r/s`). [Reference 22](#reference-22)
+
 ### ϵ⛢ constant
 
 Uranus axial tilt
@@ -1903,15 +2238,27 @@ It is the measured angle between the ascending node (where the orbit
 crosses the reference plane northward) and the perihelion (the closest
 point to the Sun), measured in the direction of motion. [Reference 23](#reference-23)
 
+### Porb⛢ constant
+
+Uranus orbital period
+
+Uranus's orbital period — the time to complete one revolution around the Sun
+(about 84 years). It is distinct from the rotation period `Prot⛢` (the ~17 h spin
+period). The value is the anomalistic period (perihelion to perihelion), computed
+from Meeus' Chapter 38, which governs the recurrence of the perihelion passages
+exposed by `T₀⛢`. [Reference 27](#reference-27)
+
 ### T₀⛢ constant
 
-Uranus perihelion passage
+Uranus time of perihelion passage
 
-Calculated from measurement (JPL DE440 orbital propagation). Uranus's
-predicted next time of perihelion passage (~2050). Uranus's orbital
-period is approximately 84 years. Last perihelion: 1966. It is the most
-recent point in its orbit when it was closest to the Sun. Value in JDN.
-[Reference 4](#reference-4) [Materials 21](#materials-21)
+Computed, not stored: `T₀⛢` evaluates an expression (IFTE) that advances from a
+reference perihelion passage (Tp) by whole orbital periods (`Porb⛢`) and returns
+the most recent perihelion passage at or before the current date. The
+computation is carried out in Julian Day Number and converted to a date with
+`JDN→`. Uranus's orbital period is approximately 84 years; the last perihelion
+was in 1966 and the next is around 2050, so the returned value can be decades in
+the past. [Reference 27](#reference-27)
 
 
 ## Neptune constants
@@ -1922,6 +2269,14 @@ Neptune gravitational parameter
 
 Measured. Neptune system gravitational parameter, measured by Voyager
 2 radio tracking and Hubble Space Telescope astrometry of Triton. [Reference 4](#reference-4)
+
+### M♆ constant
+
+Neptune mass
+
+Neptune's mass, derived from the gravitational parameter `GM♆` and the measured
+gravitational constant `G` as `GM♆/G`. The relative uncertainty is carried as
+`ⓇG` (the dominant term), so the mass self-corrects whenever `G` is updated. [Reference 4](#reference-4) [Reference 5](#reference-5)
 
 ### Req♆ constant
 
@@ -1974,6 +2329,13 @@ Measured. Neptune's sidereal rotation period is the true time it takes
 to spin 360° on its axis (System III, from Voyager 2 radio measurements).
 [Reference 22](#reference-22)
 
+### ωrot♆ constant
+
+Neptune rotation angular velocity
+
+Neptune's sidereal rotation angular velocity, computed as `2π/Prot♆` from the
+sidereal rotation period (System III). The unit is radians per second (`r/s`). [Reference 22](#reference-22)
+
 ### ϵ♆ constant
 
 Neptune axial tilt
@@ -2020,15 +2382,28 @@ It is the measured angle between the ascending node (where the orbit
 crosses the reference plane northward) and the perihelion (the closest
 point to the Sun), measured in the direction of motion. [Reference 23](#reference-23)
 
+### Porb♆ constant
+
+Neptune orbital period
+
+Neptune's sidereal orbital period — the time to complete one revolution around
+the Sun (about 165 years). It is distinct from the rotation period `Prot♆` (the
+~16 h spin period). Tabulated sidereal value from the NASA Planetary Fact Sheet,
+used as an approximation of the anomalistic period that governs the recurrence
+of the perihelion passages exposed by `T₀♆`. [Reference 28](#reference-28)
+
 ### T₀♆ constant
 
-Neptune perihelion passage
+Neptune time of perihelion passage
 
-Calculated from measurement (JPL DE440 orbital propagation). Neptune's
-predicted next time of perihelion passage (~2042). Neptune's orbital
-period is approximately 164.8 years. Last perihelion: 1876. It is the
-most recent point in its orbit when it was closest to the Sun. Value
-in JDN. [Reference 4](#reference-4) [Materials 21](#materials-21)
+Computed, not stored: `T₀♆` evaluates an expression (IFTE) that advances from a
+reference perihelion passage (Tp) by whole orbital periods (`Porb♆`) and returns
+the most recent perihelion passage at or before the current date, carried out in
+Julian Day Number and converted to a date with `JDN→`. Neptune is a deliberate
+exception to the "most recent past perihelion" convention: its true last
+perihelion (~1876) is uninformative and hard to source, so Tp is set to the next
+perihelion (2042-09-04). Because that date is in the future, the floor-IFTE
+returns it unchanged, giving the useful upcoming date. [Reference 4](#reference-4)
 
 
 ## Pluto constants
@@ -2039,6 +2414,14 @@ Pluto gravitational parameter
 
 Measured. Pluto system gravitational parameter, measured by New Horizons
 radio tracking. [Reference 4](#reference-4)
+
+### M♇ constant
+
+Pluto mass
+
+Pluto's mass, derived from the gravitational parameter `GM♇` and the measured
+gravitational constant `G` as `GM♇/G`. The relative uncertainty is carried as
+`ⓇG` (the dominant term), so the mass self-corrects whenever `G` is updated. [Reference 4](#reference-4) [Reference 5](#reference-5)
 
 ### Req♇ constant
 
@@ -2089,6 +2472,15 @@ Measured. Pluto's sidereal rotation period is the true time it takes to
 spin 360° on its axis. Pluto rotates retrograde and is tidally locked to
 its moon Charon. [Reference 26](#reference-26)
 
+### ωrot♇ constant
+
+Pluto rotation angular velocity
+
+Pluto's sidereal rotation angular velocity, computed as `2π/Prot♇` from the
+sidereal rotation period. The value is negative because Pluto rotates retrograde;
+the uncertainty uses the positive magnitude. The unit is radians per second
+(`r/s`). [Reference 26](#reference-26)
+
 ### ϵ♇ constant
 
 Pluto axial tilt
@@ -2135,14 +2527,27 @@ It is the measured angle between the ascending node (where the orbit crosses
 the reference plane northward) and the perihelion (the closest point to the
 Sun), measured in the direction of motion. [Reference 23](#reference-23)
 
+### Porb♇ constant
+
+Pluto orbital period
+
+Pluto's sidereal orbital period — the time to complete one revolution around the
+Sun (about 248 years). It is distinct from the rotation period `Prot♇` (the
+~6.4 day spin period). Tabulated sidereal value from the NASA Planetary Fact
+Sheet, used as an approximation of the anomalistic period that governs the
+recurrence of the perihelion passages exposed by `T₀♇`. [Reference 28](#reference-28)
+
 ### T₀♇ constant
 
-Pluto perihelion passage
+Pluto time of perihelion passage
 
-Measured. Pluto's last time of perihelion passage (1989 Sep 05). Pluto's
-orbital period is approximately 248 years. It is the most recent point in
-its orbit when it was closest to the Sun. Next perihelion: ~2237. Value
-in JDN. [Reference 4](#reference-4) [Materials 21](#materials-21)
+Computed, not stored: `T₀♇` evaluates an expression (IFTE) that advances from a
+reference perihelion passage (Tp) by whole orbital periods (`Porb♇`) and returns
+the most recent perihelion passage at or before the current date. The
+computation is carried out in Julian Day Number and converted to a date with
+`JDN→`. Pluto's orbital period is approximately 248 years; the last perihelion
+was in 1989 (Sep 05) and the next is around 2237, so the returned value can be
+decades in the past. [Reference 4](#reference-4)
 
 ## Sun constants
 
@@ -2219,6 +2624,14 @@ The Solar sidereal rotation period at the equator (System I) is measured
 by tracking surface features using Doppler techniques. It is the true
 time it takes to spin 360° on its axis. [Reference 20](#reference-20) [Reference 21](#reference-21)
 
+
+### ωrot☉ constant
+
+Solar rotation angular velocity
+
+The Sun's sidereal rotation angular velocity at the equator (System I), computed
+as `2π/Prot☉` from the sidereal rotation period. The unit is radians per second
+(`r/s`). [Reference 20](#reference-20) [Reference 21](#reference-21)
 
 ## Cosmology constants
 
@@ -2299,7 +2712,7 @@ Milky Way dark matter fraction
 
 Measured fraction of dark matter in the Milky Way galaxy. Estimated
 from rotation curves, satellite dynamics, and gravitational lensing.
-[Reference 8](#reference-8) [Reference 9](#reference-9)
+[Reference 9](#reference-9) [Reference 32](#reference-32)
 
 ### RG constant
 
@@ -2338,21 +2751,21 @@ Andromeda galaxy total mass
 
 Measure of the total mass of the Andromeda galaxy (M31, NGC 224), including
 dark matter, estimated from satellite galaxy kinematics and gravitational
-timing arguments. [Reference 11](#reference-11) [Reference 12](#reference-12)
+timing arguments. [Reference 35](#reference-35) [Reference 36](#reference-36)
 
 ### fDMNGC224 constant
 
 Andromeda dark matter fraction
 
 Measured fraction of dark matter in the Andromeda galaxy (M31), estimated
-from dynamical modelling of its halo. [Reference 11](#reference-11) [Reference 12](#reference-12)
+from dynamical modelling of its halo. [Reference 31](#reference-31) [Reference 35](#reference-35)
 
 ### RNGC224 constant
 
 Andromeda galaxy disk radius
 
 Measurement of the mean equatorial radius of the Andromeda galaxy (M31),
-estimated from stellar population surveys. [Reference 11](#reference-11)
+estimated from stellar population surveys. [Reference 34](#reference-34)
 
 ### DNGC224 constant
 
@@ -2360,7 +2773,7 @@ Distance to Andromeda galaxy
 
 Measurement of the mean distance from the Milky Way to the Andromeda
 galaxy (M31), measured using Cepheid variable stars and tip of the red
-giant branch. [Reference 11](#reference-11)
+giant branch. [Reference 29](#reference-29)
 
 ### GM★Vega constant
 
@@ -2485,7 +2898,7 @@ Above this threshold, dry air undergoes avalanche ionisation
 [Materials 1](#materials-1)
 [Materials 2](#materials-2)
 
-## N2 constant
+## N2 constants
 
 Gas
 
@@ -2566,7 +2979,7 @@ Measured. Dielectric breakdown field of N2 at STP. Slightly higher
 than dry air; preferred for high-voltage insulation. It is the electric
 field threshold above which an avalanche ionisation occurs. [Materials 2](#materials-2)
 
-## O2 constant
+## O2 constants
 
 Gas
 
@@ -2645,7 +3058,7 @@ Dielectric rigidity of O2
 Measured. Dielectric breakdown electric field of O2 at STP.
 Slightly lower than N2. [Materials 2](#materials-2)
 
-## Argon constant
+## Argon constants
 
 Gas
 
@@ -2715,7 +3128,7 @@ Dielectric rigidity of Ar
 Measured. Dielectric breakdown electric field of argon at STP. Lower than
 air due to absence of polar molecules. [Materials 2](#materials-2)
 
-## CO2 constant
+## CO2 constants
 
 Gas
 
@@ -2805,7 +3218,7 @@ air. [Materials 2](#materials-2)
   For liquids: `cv ≈ `cp (difference < 1%), `γ ≈ 1`, `R = cp - cv ≈ 0`.
   These parameters are therefore not listed for liquids.
 
-## H2O constant
+## H2O constants
 
 Liquid
 
@@ -2847,7 +3260,7 @@ quantifies how strongly a material opposes the flow of electric current.
 
 ## C1. Materials for optical fibers and waveguides
 
-## Silicon constant
+## Silicon constants
 
 Dielectric
 
@@ -2889,7 +3302,7 @@ Semiconductor; resistivity varies over many orders of magnitude with doping.
 It quantifies how strongly a material opposes the flow of electric current.
 [Materials 10](#materials-10) [Materials 11](#materials-11)
 
-## SiO2 constant
+## SiO2 constants
 
 Dielectric
 
@@ -2898,7 +3311,7 @@ Dielectric
 Fused silica density
 
 Measured. Volumetric density of amorphous fused silica (vitreous SiO2),
-the primary material for standard optical fibers. [Materials 5](#materials-5) [Materials 7](#materials-7)
+the primary material for standard optical fibers. [Materials 7](#materials-7)
 
 ### nSiO2 constant
 
@@ -2938,11 +3351,11 @@ Dielectric rigidity of fused silica
 Measured. Dielectric breakdown electric field of fused silica. Very high;
 SiO2 is the standard gate dielectric in MOSFET technology. [Materials 7](#materials-7)
 
-## GeO2 constant
+## GeO2 constants
 
 Dielectric
 
-## ρvGeO2 constant
+### ρvGeO2 constant
 
 Germanate glass density
 
@@ -2979,7 +3392,7 @@ Dielectric rigidity of germanate glass
 Measured. Dielectric breakdown electric field of GeO2 glass. Similar
 order of magnitude to SiO2; varies with purity. [Materials 9](#materials-9)
 
-## Si3N4 constant
+## Si3N4 constants
 
 Dielectric
 
@@ -3023,7 +3436,7 @@ SiO2; used as storage dielectric in SONOS flash memory. [Materials 19](#material
 
 ## C2. Reference optical glasses
 
-##BK7 Glass constant
+## BK7 Glass constants
 
 Dielectric
 
@@ -3066,7 +3479,7 @@ crystalline dielectrics due to its amorphous microstructure. [Materials 15](#mat
 
 ## C3. Optical crystals (UV & IR)
 
-## Al2O3 Sapphire constant
+## Al2O3 Sapphire constants
 
 Dielectric
 
@@ -3107,7 +3520,7 @@ Dielectric rigidity of sapphire
 Measured. Dielectric breakdown electric field of sapphire. High strength;
 enables use in high-field capacitors and microwave devices. [Materials 16](#materials-16)
 
-## CaF2 constant
+## CaF2 constants
 
 Dielectric
 
@@ -3148,7 +3561,7 @@ Dielectric rigidity of CaF2
 Measured. Dielectric breakdown electric field of CaF2 crystal. Very high;
 consistent with use in high-power UV laser optics. [Materials 17](#materials-17)
 
-## C Diamond constant
+## C Diamond constants
 
 Dielectric
 
@@ -3195,7 +3608,7 @@ electronics. [Materials 13](#materials-13) [Materials 14](#materials-14)
     For metals: `n` not listed (complex `n`, strongly wavelength-dependent).
     `cv ≈ cp` for all metals at room temperature (difference < 0.5%).
 
-## Al constant
+## Al Metal constants
 
 Metal
 
@@ -3212,7 +3625,7 @@ Specific heat of aluminium
 
 Measured. Specific heat of pure aluminium at `20°C`. [Materials 12](#materials-12) [Materials 2](#materials-2)
 
-## Cu constant
+## Cu Metal constants
 
 Metal
 
@@ -3229,7 +3642,7 @@ Specific heat of copper
 
 Measured. Specific heat of copper at `20°C`. [Materials 12](#materials-12) [Materials 2](#materials-2)
 
-## Fe constant
+## Fe Metal constants
 
 Metal
 
@@ -3249,6 +3662,33 @@ Measured (alpha phase). Specific heat of iron (alpha phase) at `20°C`.
 
 
 ## Dates constants
+
+### America constants
+
+[IndigenousPeoplesDay](#indigenouspeoplesday-constant).
+
+### IndigenousPeoplesDay constant
+
+Indigenous Peoples' Day recalls the arrival of Christopher Columbus in the
+Americas on October 12, 1492, and honours the peoples who lived there.
+
+### Australia constants
+
+[AustraliaDay](#australiaday-constant).
+
+### AustraliaDay constant
+
+Australia Day commemorates the arrival of the First Fleet at Sydney Cove on
+January 26, 1788.
+
+### France constants
+
+[BastilleDay](#bastilleday-constant).
+
+### USA constants
+
+[IndependenceDay](#independenceday-constant) and
+[MartinLutherKingDeath](#martinlutherkingdeath-constant).
 
 ### BastilleDay constant
 
@@ -3319,6 +3759,10 @@ Particle Data Group (2024). "Review of Particle Physics — Astrophysical Consta
 
 Particle Data Group 2023 Prša, A., et al. (2016). "Nominal values for selected solar and planetary quantities: IAU 2015 Resolution B3". The Astronomical Journal, 152(2), 41. arXiv:1605.09788 — DOI: 10.3847/0004-6256/152/2/41
 
+### WGS-84
+
+National Geospatial-Intelligence Agency (2014). Department of Defense World Geodetic System 1984: Its Definition and Relationships with Local Geodetic Systems, NGA.STND.0036_1.0.0_WGS84, 3rd ed. (Defining parameters of the WGS-84 reference ellipsoid used by GPS.)
+
 ### Reference 4
 
 Park, R.S., et al. (2021). "The JPL Planetary and Lunar Ephemerides DE440 and DE441". The Astronomical Journal, 161(3), 105. DOI: 10.3847/1538-3881/abd414
@@ -3349,14 +3793,6 @@ Watkins, L.L., et al. (2019). "Evidence for an Intermediate-Mass Milky Way from 
 
 Posti, L., & Helmi, A. (2019). "Mass and shape of the Milky Way's dark matter halo with globular clusters from Gaia and Hubble". Astronomy & Astrophysics, 621, A56. arXiv:1805.01408 — DOI: 10.1051/0004-6361/201833355
 
-### Reference 11
-
-Peñarrubia, J., et al. (2014). "A timing constraint on the (total) mass of the Large Magellanic Cloud". Monthly Notices of the Royal Astronomical Society, 443(3), 2204–2222. arXiv:1405.4662 — DOI: 10.1093/mnras/stu879
-
-### Reference 12
-
-Veljanoski, J., et al. (2014). "The M31 satellite plane: Evidence for a recent flyby?" Monthly Notices of the Royal Astronomical Society: Letters, 442(1), L86–L90. arXiv:1404.5988 — DOI: 10.1093/mnrasl/slu050
-
 ### Reference 13
 
 Yoon, J., et al. (2010). "A New View of Vega's Composition, Mass, and Age". The Astrophysical Journal, 708(1), 71–79. arXiv:0910.3124 — DOI: 10.1088/0004-637X/708/1/71
@@ -3364,6 +3800,30 @@ Yoon, J., et al. (2010). "A New View of Vega's Composition, Mass, and Age". The 
 ### Reference 14
 
 Aufdenberg, J.P., et al. (2006). "First Results from the CHARA Array. VII. Long-Baseline Interferometric Measurements of Vega Consistent with a Pole-On, Rapidly Rotating Star". The Astrophysical Journal, 645(1), 664–675. arXiv:astro-ph/0603327 — DOI: 10.1086/504149
+
+### Reference 29
+
+Li, S., Riess, A.G., & Yuan, W. (2021). The Astrophysical Journal, 920, 84. DOI: 10.3847/1538-4357/ac1597 — Cepheid distance to M31 (761 ± 11 kpc), source for the distance to the Andromeda galaxy `DNGC224`.
+
+### Reference 31
+
+Sick, J., Courteau, S., Cuillandre, J.-C., et al. (2015). IAU Symposium 311, 82 (arXiv:1410.0017) — M31 stellar mass and mass-to-light modelling, source for the Andromeda dark matter fraction `fDMNGC224`.
+
+### Reference 32
+
+Licquia, T.C., & Newman, J.A. (2015). The Astrophysical Journal, 806, 96. DOI: 10.1088/0004-637X/806/1/96 — Milky Way stellar mass, source for the Milky Way dark matter fraction `fDMG`.
+
+### Reference 34
+
+Nieten, C., Neininger, N., Guélin, M., et al. (2006). Astronomy & Astrophysics, 453, 459. DOI: 10.1051/0004-6361:20035672 — M31 disk extent from CO and HI surveys, source for the Andromeda galaxy disk radius `RNGC224`.
+
+### Reference 35
+
+Watkins, L.L., Evans, N.W., & An, J.H. (2010). Monthly Notices of the Royal Astronomical Society, 406, 264. DOI: 10.1111/j.1365-2966.2010.16708.x — Tracer mass estimators applied to the Andromeda satellite system, source for the Andromeda galaxy total mass `MNGC224` and the dynamical mass in `fDMNGC224`.
+
+### Reference 36
+
+Zhang, X., Chen, B., Chen, P., Sun, J., & Tian, Z. (2024). Monthly Notices of the Royal Astronomical Society, 528, 2653. DOI: 10.1093/mnras/stae025 — Updated dynamical mass of the Andromeda galaxy, corroborating `MNGC224`.
 
 ### Particle physics data
 
@@ -3419,6 +3879,14 @@ Williams, J.G., et al. (2014). "Lunar interior properties from the GRAIL mission
 
 Nimmo, F., et al. (2017). "Mean radius and shape of Pluto and Charon from New Horizons images". Icarus, 287, 12–29. arXiv:1603.00821 — DOI: 10.1016/j.icarus.2016.06.027
 
+### Reference 27
+
+Meeus, J. (1998). Astronomical Algorithms, 2nd ed. Willmann-Bell Inc., Richmond, Virginia. ISBN: 978-0-943396-61-3. Chapter 38: Perihelion and Aphelion of the Planets; Chapter 50: Perigee and Apogee of the Moon, pp. 355–358. (Planetary orbital periods derived from the Chapter 38 elements; lunar perigee formula from Chapter 50.)
+
+### Reference 28
+
+Williams, D.R. NASA Planetary Fact Sheet. NASA Space Science Data Coordinated Archive (NSSDCA), Goddard Space Flight Center. [Source](https://nssdc.gsfc.nasa.gov/planetary/factsheet/) Accessed: June 2026. (Sidereal orbital periods of the giant planets, used as an approximation of the anomalistic period.)
+
 ## Materials & Fluids data
 
 ### Materials 1
@@ -3440,10 +3908,6 @@ Wagner, W., & Pruss, A. (2002). "The IAPWS Formulation 1995 for the Thermodynami
 ### Materials 5
 
 Malitson, I.H. (1965). "Interspecimen Comparison of the Refractive Index of Fused Silica". J. Opt. Soc. Am., 55(10), 1205–1209. DOI: 10.1364/JOSA.55.001205
-
-### Materials 6
-
-Palik, E.D. (Ed.) (1985). Handbook of Optical Constants of Solids. Academic Press, New York. ISBN: 0-12-544420-6
 
 ### Materials 7
 
@@ -3495,15 +3959,3 @@ Luke, K., Okawachi, Y., Lamont, M.R.E., Gaeta, A.L., & Lipson, M. (2015). "Broad
 ### Materials 19
 
 NIST Materials Measurement Laboratory (2024). Materials Properties Database. [Source](https://trc.nist.gov) — Accessed: March 2026
-
-### Materials 20
-
-Espenak, F. (2025–2026). Sky Event Almanacs — Greenwich Mean Time. AstroPixels.com. [Source](https://www.astropixels.com/almanac/almanac21) Accessed: April–May 2026. (Source for perihelion/perigee dates of inner planets and Moon.)
-
-### Materials 21
-
-Park, R.S., et al. (2021). "The JPL Planetary and Lunar Ephemerides DE440 and DE441". The Astronomical Journal, 161(3), 105. DOI: 10.3847/1538-3881/abd414 (Source for perihelion dates of outer planets: Jupiter to Pluto.)
-
-### Materials 22
-
-Meeus, J. (1998). Astronomical Algorithms, 2nd ed. Willmann-Bell Inc., Richmond, Virginia. ISBN: 978-0-943396-61-3. Chapter 50: Perigee and Apogee of the Moon, pp. 355–358. (Formula for lunar perigee — implemented in MPERC.txt.)

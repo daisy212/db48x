@@ -72,7 +72,7 @@ struct range : complex
     static bool adjust_input(id ty, algebraic_g &x, algebraic_g &y);
     static bool adjust_output(id ty, algebraic_g &x, algebraic_g &y);
 
-    enum { INTERVAL_MARK = L'…' };
+    enum { INTERVAL_MARK = U'…' };
 
 public:
     SIZE_DECL(range);
@@ -147,7 +147,7 @@ struct drange : range
 // ----------------------------------------------------------------------------
 {
     drange(id type, algebraic_r x, algebraic_r y);
-    enum { PLUSMINUS_MARK = L'±' };
+    enum { PLUSMINUS_MARK = U'±' };
 
 public:
     OBJECT_DECL(drange);
@@ -190,7 +190,7 @@ struct uncertain : range
         return rt.make<uncertain>(a, s);
     }
 
-    enum { SIGMA_MARK = L'σ' };
+    enum { SIGMA_MARK = U'σ' };
 
     // Uncertain number implementation for main functions
 #define UNCERTAIN_FUNCTION(name)    static uncertain_p name(uncertain_r u)
@@ -255,12 +255,12 @@ uncertain_p operator/(uncertain_r x, uncertain_r y);
 uncertain_p operator^(uncertain_r x, uncertain_r y);
 
 
-COMMAND_DECLARE(FromRange, 1);
-COMMAND_DECLARE(ToRange, ~2);
-COMMAND_DECLARE(ToDeltaRange, ~2);
-COMMAND_DECLARE(ToPercentRange, ~2);
-COMMAND_DECLARE(ToUncertain, ~2);
-COMMAND_DECLARE(RangeUnion, 2);
-COMMAND_DECLARE(RangeIntersect, 2);
+COMMAND_DECLARE_FN(FromRange, 1);
+COMMAND_DECLARE_FN(ToRange, ~2);
+COMMAND_DECLARE_FN(ToDeltaRange, ~2);
+COMMAND_DECLARE_FN(ToPercentRange, ~2);
+COMMAND_DECLARE_FN(ToUncertain, ~2);
+COMMAND_DECLARE_FN(RangeUnion, 2);
+COMMAND_DECLARE_FN(RangeIntersect, 2);
 
 #endif // RANGE_H

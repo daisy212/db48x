@@ -173,7 +173,7 @@ void CustomMenu::add_custom_item(info &mi, object_p obj)
         {
             if (object_p value = directory::recall_all(sym, false))
                 if (value->type() == object::ID_directory)
-                    mi.marker = L'◥';
+                    mi.marker = U'◥';
         }
         else
         {
@@ -215,7 +215,7 @@ void CustomMenu::add_custom_item(info &mi, object_p obj)
     if (!sym)
         sym = obj->as_symbol(false);
     if (obj->type() == object::ID_directory)
-        mi.marker = L'◥';
+        mi.marker = U'◥';
     menu::items(mi, sym, obj);
 }
 
@@ -349,35 +349,6 @@ COMMAND_BODY(KeyMap)
 }
 
 
-static uint convert_key_position_to_id(object_p obj)
-// ----------------------------------------------------------------------------
-//    Convert the HP48 format (rc.p = row, column, plane) to native key
-// ----------------------------------------------------------------------------
-{
-    uint rc = obj->as_uint32(0, true);
-
-    if (decimal_g rcp = obj->as<decimal>())
-    {
-        if (rc < 100)
-        {
-            if (decimal_g rcps = decimal::make(1, 2)) // Decimal part * 100
-            {
-                if (decimal_g rcpf = (rcps * rcp) % rcps)
-                {
-                    ularge pf = rcpf->as_unsigned();
-                    return platform_keyid(rc, uint(pf));
-                }
-            }
-        }
-        else
-        {
-            rt.value_error();
-        }
-    }
-    return platform_keyid(rc, 0);
-}
-
-
 COMMAND_BODY(AssignKey)
 // ----------------------------------------------------------------------------
 //   Assign a single key
@@ -385,7 +356,7 @@ COMMAND_BODY(AssignKey)
 {
     if (object_g obj = rt.stack(1))
         if (object_g pos = rt.stack(0))
-            if (uint keyid = convert_key_position_to_id(pos))
+            if (uint keyid = ui.key_for_position(pos))
                 if (ui.assign(keyid, obj))
                     if (rt.drop(2))
                         return OK;
@@ -412,14 +383,14 @@ COMMAND_BODY(DeleteKeys)
         {
             for (object_p key : *keys)
             {
-                if (uint keyid = convert_key_position_to_id(key))
+                if (uint keyid = ui.key_for_position(key))
                     ui.assign(keyid, nullptr);
                 else
                     return rt.value_error(), ERROR;
             }
             return OK;
         }
-        if (uint keyid = convert_key_position_to_id(obj))
+        if (uint keyid = ui.key_for_position(obj))
             if (ui.assign(keyid, nullptr))
                 return OK;
 
@@ -448,7 +419,7 @@ COMMAND_BODY(StoreKeys)
                         assigned->type() == ID_integer)
                         break;
 
-                    uint keyid = convert_key_position_to_id(obj);
+                    uint keyid = ui.key_for_position(obj);
                     if (!keyid)
                     {
                         rt.value_error();
@@ -472,7 +443,7 @@ COMMAND_BODY(StoreKeys)
 }
 
 
-static bool compatible_keyid(object_p name, object_p obj, void *)
+static bool compatible_keyid(object_p name, object_p obj, void *arg)
 // ----------------------------------------------------------------------------
 //   Append the compatible key ID to the list
 // ----------------------------------------------------------------------------
@@ -480,8 +451,9 @@ static bool compatible_keyid(object_p name, object_p obj, void *)
     if (integer_p keyarg = name->as<integer>())
     {
         ularge keyid = keyarg->value<ularge>();
-        object_p ckey = compatible_key_id(keyid);
-        return ckey && obj && rt.append(obj) && rt.append(ckey);
+        object_p ckey  = compatible_key_id(keyid);
+        scribble &scr = *((scribble *) arg);
+        return ckey && obj && scr.append(obj) && scr.append(ckey);
     }
     return false;
 }
@@ -502,14 +474,14 @@ COMMAND_BODY(RecallKeys)
         {
             object_p updir = static_object(ID_UpDir);
             integer_p level = integer::make(depth);
-            if (!rt.append(level) || !rt.append(updir))
+            if (!scr.append(level) || !scr.append(updir))
                 return ERROR;
         }
         if (object_p keymapvar = dir->recall(name))
         {
             if (directory_p keymap = keymapvar->as<directory>())
             {
-                keymap->enumerate(compatible_keyid, nullptr);
+                keymap->enumerate(compatible_keyid, &scr);
                 used = scr.growth();
             }
         }

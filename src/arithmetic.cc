@@ -412,7 +412,7 @@ algebraic_p arithmetic::optimize<subtract>(algebraic_r x, algebraic_r y)
         {
             if (y->is_zero(false) && !y->is_based()) // X - 0 = X
                 return x;
-            if (x->is_same_as(y))                   // X - X = 0
+            if (!x->is_range() && x->is_same_as(y)) // X - X = 0
                 return integer::make(0);
             if (x->is_zero(false) && !x->is_based() && y->is_symbolic())
                 return neg::run(y);                 // 0 - X = -X
@@ -808,7 +808,7 @@ algebraic_p arithmetic::optimize<divide>(algebraic_r x, algebraic_r y)
                 return x;
             if (x->is_one(false) && y->is_symbolic())
                 return inv::run(y);                 // 1 / X = X⁻¹
-            if (x->is_same_as(y))
+            if (!x->is_range() && x->is_same_as(y))
                 return integer::make(1);            // X / X = 1
         }
     }
@@ -1247,6 +1247,14 @@ algebraic_p arithmetic::optimize<struct pow>(algebraic_r x, algebraic_r y)
         return r;
     }
 
+    // 0^y is 0 for real y>0, e.g. 0^(1/2), and a division by zero for y<0
+    if (x->is_zero(false) && x->is_real() && y->is_real())
+    {
+        if (y->is_negative(false))
+            return rt.zero_divide(false);
+        return x;
+    }
+
     // Not yet implemented
     return nullptr;
 }
@@ -1269,6 +1277,22 @@ algebraic_p arithmetic::non_numeric<struct pow>(algebraic_r x, algebraic_r y)
         // to the third power.
         if (!y->is_integer())
             return xa->map(pow::evaluate, y);
+
+        // X^0 is the identity matrix for a square matrix, not the scalar 1
+        if (y->is_zero(false))
+        {
+            size_t rows = 0, cols = 0;
+            if (xa->is_matrix(&rows, &cols, false))
+            {
+                if (rows != cols)
+                {
+                    rt.dimension_error();
+                    return nullptr;
+                }
+                return array::identity(rows);
+            }
+            return xa->map(pow::evaluate, y);
+        }
     }
     else if (array_g ya = y->as<array>())
     {
@@ -1342,7 +1366,14 @@ bool pow::bignum_ok(bignum_g &x, bignum_g &y)
     // Compute result, check that it does not overflow
     if (y->type() == ID_neg_bignum)
         return false;
+    bool based = is_based(x->type());
     x = bignum::pow(x, y);
+    if (!x && !based)
+    {
+        // Result too big for an integer: let the decimal code compute it
+        rt.clear_error();
+        return false;
+    }
     return x;
 }
 
@@ -1537,6 +1568,35 @@ algebraic_p arithmetic::non_numeric<struct atan2>(algebraic_r x, algebraic_r y)
 //
 // ============================================================================
 
+static algebraic_p real_result_or_complex(object::id  op,
+                                          algebraic_p result,
+                                          algebraic_r x,
+                                          algebraic_r y)
+// ----------------------------------------------------------------------------
+//   With ComplexResults, compute x^y for x<0 as a complex principal value
+// ----------------------------------------------------------------------------
+//   Real power code rejects a negative base with a non-integer exponent.
+//   Like sqrt, promote to complex in that case when ComplexResults is set.
+{
+    if (result || op != object::ID_pow || !Settings.ComplexResults())
+        return result;
+    if (!x || !y || !x->is_real() || !y->is_real() || !x->is_negative(false))
+        return nullptr;
+    algebraic_g zero = integer::make(0);
+    complex_g   xc   = rectangular::make(x, zero);
+    complex_g   yc   = rectangular::make(y, zero);
+    if (!xc || !yc)
+        return nullptr;
+    rt.clear_error();
+    if (!pow::complex_ok(xc, yc))
+        return nullptr;
+    if (Settings.AutoSimplify())
+        if (algebraic_p re = xc->is_real())
+            return re;
+    return xc;
+}
+
+
 algebraic_p arithmetic::evaluate(id          op,
                                  algebraic_r xr,
                                  algebraic_r yr,
@@ -1593,7 +1653,7 @@ algebraic_p arithmetic::evaluate(id          op,
                 if (ops.integer_ok(xt, yt, xv, yv))
                 {
                     if (based)
-                        xv &= (1UL << ws) - 1UL;
+                        xv &= (1ULL << ws) - 1ULL;
                     return rt.make<integer>(xt, xv);
                 }
             }
@@ -1628,13 +1688,9 @@ algebraic_p arithmetic::evaluate(id          op,
             {
                 if (ops.fraction_ok(xf, yf))
                 {
-                    x = algebraic_p(fraction_p(xf));
-                    if (x)
-                    {
-                        bignum_g d = xf->denominator();
-                        if (d->is(1))
-                            return algebraic_p(bignum_p(xf->numerator()));
-                    }
+                    x = fraction::simplify(xf);
+                    if (x && !x->is_fraction())
+                        return x;
                     if (Settings.NumericalResults())
                         (void) to_decimal(x, true);
                     return x;
@@ -1648,10 +1704,10 @@ algebraic_p arithmetic::evaluate(id          op,
     {
         if (hwfloat_g fx = x->as<hwfloat>())
             if (hwfloat_g fy = y->as<hwfloat>())
-                return ops.fop(fx, fy);
+                return real_result_or_complex(op, ops.fop(fx, fy), x, y);
         if (hwdouble_g dx = x->as<hwdouble>())
             if (hwdouble_g dy = y->as<hwdouble>())
-                return ops.dop(dx, dy);
+                return real_result_or_complex(op, ops.dop(dx, dy), x, y);
     }
 
 
@@ -1669,7 +1725,7 @@ algebraic_p arithmetic::evaluate(id          op,
             rt.domain_error();
             return nullptr;
         }
-        return xv;
+        return real_result_or_complex(op, +xv, x, y);
     }
 
     // Complex data types
@@ -1735,6 +1791,21 @@ algebraic_p arithmetic::evaluate(id          op,
                             return polynomial::pow(xp, yi);
                     if (op == ID_add || op == ID_subtract || op == ID_multiply)
                         yp = polynomial::make(y);
+
+                    // Dividing a polynomial by a number divides coefficients
+                    id yty = y->type();
+                    if (op == ID_divide && xpp && (is_real(yty) ||
+                                                   is_complex(yty)))
+                    {
+                        algebraic_g one = integer::make(1);
+                        algebraic_g inv = one / y;
+                        if (!inv)
+                            return nullptr;
+                        yp = polynomial::make(+inv);
+                        if (!yp)
+                            return nullptr;
+                        return polynomial::mul(xp, yp);
+                    }
                 }
                 if (yp)
                 {
@@ -2038,13 +2109,25 @@ algebraic_g pow(algebraic_r xr, ularge y)
             r = prec(decimal_p(+r));
         return r;
     }
+    if (x->type() == object::ID_uncertain)
+    {
+        // Uncertain numbers propagate the standard deviation, they are not
+        // intervals: use the same path as an explicit `y ^`
+        algebraic_g ya = integer::make(y);
+        return pow::evaluate(x, ya);
+    }
     if (x->is_range())
     {
-        algebraic_g lo = range_p(+x)->lo();
-        algebraic_g hi = range_p(+x)->hi();
+        algebraic_g lo   = range_p(+x)->lo();
+        algebraic_g hi   = range_p(+x)->hi();
+        bool        lneg = lo->is_negative(false);
+        bool        hneg = hi->is_negative(false);
+        bool        zero = lo->is_zero(false) || hi->is_zero(false);
         lo = pow(lo, y);
         hi = pow(hi, y);
         range::sort(lo, hi);
+        if (y && y % 2 == 0 && (zero || lneg != hneg))
+            lo = integer::make(0);      // Even power of a range containing 0
         return range::make(x->type(), lo, hi);
     }
     while (y)

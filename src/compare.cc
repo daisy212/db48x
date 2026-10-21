@@ -307,17 +307,49 @@ algebraic_p comparison::compare(comparison_fn comparator,
 //   Compare two algebraic values without using the stack
 // ----------------------------------------------------------------------------
 {
+    if (!x || !y)
+        return nullptr;
+
+    cleaner purge;
+    algebraic_p result = nullptr;
     int cmp = 0;
-    if (compare(&cmp, x, y))
+    bool ok = false;
+
+    // Complex numbers can be tested for equality, but not ordered
+    if ((op == ID_TestEQ || op == ID_TestNE) &&
+        (x->is_complex() || y->is_complex()) &&
+        (x->is_complex() || x->is_real()) &&
+        (y->is_complex() || y->is_real()))
+    {
+        algebraic_g diff = x - y;
+        if (!diff)
+            return nullptr;
+        cmp = !diff->is_zero(false);
+        ok = true;
+    }
+    else
+    {
+        ok = compare(&cmp, x, y);
+    }
+
+    if (ok)
     {
         // Could evaluate the result, return True or False
         id type = comparator(cmp) ? ID_True : ID_False;
-        return algebraic_p(command::static_object(type));
+        result = algebraic_p(command::static_object(type));
     }
+    else
+    {
+        // If the comparison failed with an error, e.g. ordering complex numbers
+        if (rt.error())
+            return nullptr;
 
-    // Otherwise, need to build an equation with the comparison
-    expression_p eq = expression::make(op, x, y);
-    return eq;
+        // Otherwise, need to build an equation with the comparison
+        result = expression::make(op, x, y);
+    }
+    if (result && result != +x && result != +y)
+        result = purge(result);
+    return result;
 }
 
 
@@ -356,10 +388,22 @@ object::result comparison::is_same(bool names)
             y = ys->recall();
             yt = y->type();
         }
-        else if (local_p yl = x->as_quoted<local>())
+        else if (local_p yl = y->as_quoted<local>())
         {
             y = yl->recall();
             yt = y->type();
+        }
+
+        // Like other comparisons, '==' remains symbolic if an argument is
+        if (x->is_extended_algebraic() && y->is_extended_algebraic() &&
+            (is_symbolic(xt) || is_symbolic(yt)))
+        {
+            algebraic_g ya = algebraic_p(rt.stack(1));
+            algebraic_g xa = algebraic_p(rt.stack(0));
+            algebraic_g ra = expression::make(ID_TestSame, ya, xa);
+            if (ra && rt.drop(2) && rt.push(+ra))
+                return OK;
+            return ERROR;
         }
     }
 

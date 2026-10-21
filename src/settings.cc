@@ -46,8 +46,6 @@
 
 #include <cstdarg>
 #include <cstdlib>
-#include <random>
-#include <stdexcept>
 
 
 RECORDER(settings,              16, "Settings");
@@ -212,7 +210,24 @@ void settings::save(renderer &out, bool show_defaults)
     // Save the current menu
     if (menu_p menu = ui.menu())
     {
-        menu->render(out);
+        // Menus numbered on the fly, like LibraryMenu00 or ConstantsMenu03,
+        // are not commands: read back with the state, their name would land
+        // on the stack. Save the menu they belong to instead.
+        object::id mty = menu->type();
+        if (mty >= object::ID_UnitMenu00 && mty <= object::ID_CharactersMenu99)
+        {
+            object::id parent =
+                mty >= object::ID_CharactersMenu00 ? object::ID_CharactersMenu
+              : mty >= object::ID_LibraryMenu00    ? object::ID_Library
+              : mty >= object::ID_EquationsMenu00  ? object::ID_EquationsMenu
+              : mty >= object::ID_ConstantsMenu00  ? object::ID_ConstantsMenu
+              :                                      object::ID_UnitsMenu;
+            object::static_object(parent)->render(out);
+        }
+        else
+        {
+            menu->render(out);
+        }
         out.put('\n');
     }
 }
@@ -331,7 +346,7 @@ unicode settings::digit_separator(uint index)
 //   Find the digit separator from
 // ----------------------------------------------------------------------------
 {
-    static unicode sep[] = { SPACE_DEFAULT, ',', L'’', '_' };
+    static unicode sep[] = { SPACE_DEFAULT, ',', U'’', '_' };
     if (sep[index] == ',' && Settings.DecimalComma())
         return '.';
     return sep[index];
@@ -576,6 +591,11 @@ bool settings::flag(object::id name, bool value)
     {
         // For all settings, 'store' is much like running it
 #define ID(n)
+#define SETTING_VALUE(Name, Alias, Base, Value) \
+    case ID_##Name:                             \
+        if (value)                              \
+            Settings.Base(Value);               \
+        break;
 #define SETTING(Name, Low, High, Init)
 #define FLAG(Enable, Disable)                   \
     case ID_##Enable:                           \
@@ -604,6 +624,10 @@ bool settings::flag(object::id name, bool *value)
         // For all settings, 'store' is much like running it
 #define ID(n)
 #define SETTING(Name, Low, High, Init)
+#define SETTING_VALUE(Name, Alias, Base, Value) \
+    case ID_##Name:                             \
+        *value = Settings.Base() == Value;      \
+        return true;
 #define FLAG(Enable, Disable)                   \
     case ID_##Enable:                           \
         *value = Settings.Enable();             \
@@ -627,6 +651,7 @@ cstring setting::printf(cstring format, ...)
 {
     va_list va;
     va_start(va, format);
+
     char   buf[80];
     size_t size = vsnprintf(buf, sizeof(buf), format, va);
     va_end(va);

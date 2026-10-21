@@ -89,7 +89,9 @@ struct polynomial : expression
     static polynomial_p get(object_p obj);
 
     // Write in the scratchpad a combination of the variables of two polynoms
-    static byte *copy_variables(polynomial_r x, byte *previous = nullptr);
+    static byte *copy_variables(polynomial_r x,
+                                scribble &scr,
+                                byte *previous = nullptr);
 
     // Add, sub, mul or div by another polynom
     static polynomial_p neg(polynomial_r x);
@@ -112,7 +114,7 @@ struct polynomial : expression
     algebraic_p         evaluate(algebraic_r x) { return horner(x); }
     static algebraic_p  horner(stack_buffer &sbuf, algebraic_r x);
     algebraic_p         horner(algebraic_r x);
-    list_p              roots(id ty, symbol_p var) const;
+    list_p              roots(id ty, symbol_p var, bool unique = true) const;
     list_p              roots_internal(id ty, symbol_p var) const;
 
     // Return total length of the polynomial in bytes
@@ -180,12 +182,15 @@ struct polynomial : expression
 FUNCTION_EXT(ToPolynomial,
              static const uint seqtypes = ((1UL << ID_array)
                                          | (1UL << ID_list)););
-COMMAND_DECLARE(FromPolynomial,         1);
-COMMAND_DECLARE(PEval,                  2);
-COMMAND_DECLARE(PRoot,                  1);
-COMMAND_DECLARE(PCoef,                  1);
+COMMAND_DECLARE_FN(FromPolynomial,      1);
+COMMAND_DECLARE_FN(PEval,               2);
+COMMAND_DECLARE_FN(PRoot,               1);
+COMMAND_DECLARE_FN(PCoef,               1);
 COMMAND_DECLARE(AlgebraConfiguration,   0);
-COMMAND_DECLARE(AlgebraVariable,        0);
+SYMBOL_DECLARE(AlgebraVariable);
 COMMAND_DECLARE(StoreAlgebraVariable,   1);
+
+COMMAND_DECLARE_SPECIAL(PartFrac, algebraic, 1,
+                        PREC_DECL(FUNCTION); SYMARGS);
 
 #endif // POLYNOMIAL_H

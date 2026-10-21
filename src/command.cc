@@ -114,7 +114,7 @@ object::id command::lookup(utf8 name, size_t &maxlen, bool eq)
         // Compute the maximum possible size for the command
         size_t max = maxlen;
         if (is_valid_as_name_initial(name) ||
-            (!eq && utf8_codepoint(name) == L'↑')) // e.g. ↑Match
+            (!eq && utf8_codepoint(name) == U'↑')) // e.g. ↑Match
         {
             for (max = utf8_size(name, max);
                  max < maxlen && !is_separator(name + max);
@@ -271,7 +271,7 @@ RENDER_BODY(command)
             if (ty == ID_divide)
                 r.put('/');
             else if (ty == ID_multiply)
-                r.put(unicode(L'·'));
+                r.put(unicode(U'·'));
             else
                 break;
             return r.size();
@@ -306,7 +306,7 @@ uint32_t command::uint32_arg(uint level)
 // ----------------------------------------------------------------------------
 {
     if (object_p d = rt.stack(level))
-        return d->as_uint32(0, true);
+        return d->as_uint32(0, true, true);
     return 0;
 }
 
@@ -317,7 +317,7 @@ int32_t command::int32_arg(uint level)
 // ----------------------------------------------------------------------------
 {
     if (object_p d = rt.stack(level))
-        return d->as_int32(0, true);
+        return d->as_int32(0, true, true);
     return 0;
 }
 
@@ -394,11 +394,9 @@ bool command::initialize_sorted_ids()
         // sometimes gives bogus data out of the QSPI when "hammered" like in
         // qsort, which results in incorrectly sorted arrays.
         bool fumbled;
-        uint sorts = 0;
         do
         {
             fumbled = false;
-            sorts++;
             qsort(sorted_ids, count, sizeof(sorted_ids[0]), sort_ids);
             sys_delay(10);      // For DM32 hardware on battery
 
@@ -728,7 +726,7 @@ MARKER_BODY(Unimplemented)
 //   We mark unimplemented features with a little gray mark
 // ----------------------------------------------------------------------------
 {
-    return L'░';
+    return U'░';
 }
 
 
@@ -848,6 +846,34 @@ COMMAND_BODY(Wait)
     return ERROR;
 }
 
+
+COMMAND_BODY(KeyEval)
+// ----------------------------------------------------------------------------
+//   Evaluate the command corresponding to the given keycode
+// ----------------------------------------------------------------------------
+{
+    if (object_p obj = rt.pop())
+        if (ui.keyeval(obj))
+            return OK;
+    if (!rt.error())
+        rt.value_error();
+    return ERROR;
+}
+
+
+COMMAND_BODY(KeyCode)
+// ----------------------------------------------------------------------------
+//   Return the object bound to the given key position
+// ----------------------------------------------------------------------------
+{
+    if (object_p obj = rt.top())
+        if (object_p code = ui.object_for_key(obj))
+            if (code && rt.top(code))
+                return OK;
+    if (!rt.error())
+        rt.value_error();
+    return ERROR;
+}
 
 
 COMMAND_BODY(Bytes)

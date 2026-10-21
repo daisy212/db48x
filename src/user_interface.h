@@ -183,6 +183,9 @@ struct user_interface
     void        clear_help();
     void        clear_menu();
     object_p    object_for_key(int key);
+    object_p    object_for_key(object_p pos);
+    static uint key_for_position(object_p pos, uint *plane = nullptr);
+    bool        keyeval(object_p pos);
     int         evaluating_function_key() const;
     bool        end_edit();
     void        clear_editor();
@@ -330,6 +333,9 @@ protected:
     bool     longpress    : 1;  // We had a long press of the key
     bool     blink        : 1;  // Cursor blink indicator
     bool     follow       : 1;  // Follow a help topic
+    uint     skipTopicSync;     // Skip topic=highlight sync for N redraws
+    uint     helpUpTarget;      // Help position to place after an up scroll
+    int      helpUpOffset;      // Where it goes, in pixels below the top
     bool     force        : 1;  // Force a redraw of everything
     bool     dirtyMenu    : 1;  // Menu label needs redraw
     bool     dirtyStack   : 1;  // Need to redraw the stack

@@ -16,10 +16,28 @@ DB48X is a modern implementation of RPL (Reverse Polish Lisp) targeting SwissMic
   is clean and a git operation would make it easy to restore the earlier state,
   then making extra changes is OK. Otherwise, add ideas to the todo list to
   be done later in a separate commit.
+* **Commits must contain the user's Signed-off-by line** in addition to the Co-authored-by mentioning the model. Do not invent a Signed-off-by address, when in doubt check earlier commits for that author in the history.
+* **Never push anything without being explicitly asked to for that commit** A request to push for one commit is not an authorization to push later ones.
 - **Avoid overwriting the user's edits.** When making changes, the user may have
   adjusted files themselves. Read the current file state before editing; prefer
   minimal, targeted edits that accomplish the goal without clobbering unrelated
   changes the user has made.
+- **Use `rg` (ripgrep) instead of `find`/`grep` when searching.** The `rg` command
+  is faster and more battery-efficient than `find` or `grep`. Examples:
+  - `rg "pattern"` instead of `grep -r "pattern"`
+  - `rg -t cpp "pattern"` to search only C++ files
+  - `rg -l "pattern"` to list files (like `grep -l`)
+  - `rg --files | rg "\.h$"` instead of `find . -name "*.h"`
+- **Do not add case-only aliases in `ids.tbl`.** Command parsing is
+  case-independent, so `LIMIT`, `Limit`, and `limit` all refer to the same
+  command once it is registered. Reserve `ALIAS` for spellings that differ in
+  more than capitalization (e.g. `TAYLR` for `Taylor`, or `PartialFractions`
+  for `PartFrac`). Symbol names are also case-independent by default
+  (`IgnoreSymbolCase`): `X` and `x` are the same, as are `ABC`, `abc`, and
+  `abC`. Do not treat capitalization as a distinct variable in docs, tests, or
+  debugging. This does not apply to `ⓧ` (`VX`): that object names the current
+  algebra variable (`STOVX` / `RCLVX`), defaults to `x`, and after `'ABC'
+  STOVX` denotes `ABC` — not `x`/`X`.
 
 ## Build System
 
@@ -27,7 +45,7 @@ DB48X is a modern implementation of RPL (Reverse Polish Lisp) targeting SwissMic
 ```bash
 make -j sim                         # Build Qt simulator
 ./db48x.app/Contents/MacOS/db48x    # Run on macOS
-./sim/db48x                         # Run on Linux
+./db48x                             # Run on Linux
 ```
 
 **Firmware:**
@@ -37,9 +55,12 @@ make -j8 debug          # Debug build
 make -j8 dm32           # Build for DM32 (db50x.pg5)
 ```
 
-**QSPI CRC rebuilds:** If you see "Run build once more", run `make` again. QSPI is flash memory containing numerical routines; the build forces CRC compatibility with original DM42 firmware to allow switching between DB48X and stock DM42 firmware.
-- `help/db48x.md` and `help/db50x.md` are **auto-generated** by the build.
-  Never edit them directly; edit `doc/commands/*.md` instead.
+**QSPI CRC rebuilds:** If you see "Run build once more", run `make` again. QSPI is flash memory containing numerical routines;
+the build forces CRC compatibility with original DM42 firmware to allow
+        switching between DB48X and stock DM42
+                       firmware.- `help / db48x.md` and `help / db50x.md` are **auto -
+    generated **by the build.Never edit them directly;
+edit `doc / commands/*.md` instead.
 - **Documentation internal links**: use only the anchor part, e.g. `(#Anchor)`,
   not `(settings.md#Anchor)`. The shipped help (`db48x.md`, `db50x.md`) is built
   by concatenating and sed-editing the input markdown files into a single file,
@@ -61,17 +82,55 @@ make -j8 dm32           # Build for DM32 (db50x.pg5)
 ## Adding a New Command
 
 1. **`src/ids.tbl`**: Add `NAMED(Foo, "→Foo")` or `CMD(Foo)`. Use `ALIAS` only
-   for spellings that differ in more than case (parsing is case-independent).
+   for spellings that differ in more than case (see general guideline above).
    Prefer `NAMED(ShortName, "LongSpelling")` when the C++ identifier is short
-   (e.g. `NAMED(PRoot, "PolynomialRoots")`); do not add `ALIAS` entries that
-   only change capitalization. Update any `ID_RANGE` lines whose boundary the
-   new command changes (e.g. `is_command`, `is_algebraic_fn`).
+   (e.g. `NAMED(PRoot, "PolynomialRoots")`). Update any `ID_RANGE` lines whose
+   boundary the new command changes (e.g. `is_command`, `is_algebraic_fn`).
 2. **Header** (e.g. `src/functions.h`): Declare with `FUNCTION(Foo)`,
-   `COMMAND_DECLARE(Foo, nargs)`, or `STANDARD_FUNCTION(Foo)` as appropriate.
+   `COMMAND_DECLARE(Foo, nargs)`, `COMMAND_DECLARE_FN(Foo, nargs)`, or
+   `STANDARD_FUNCTION(Foo)` as appropriate (see below).
 3. **Implementation** (e.g. `src/functions.cc`): Implement with
    `FUNCTION_BODY(Foo)` or `COMMAND_BODY(Foo)`.
 4. **`src/menu.cc`**: Wire up menu entries (replace `ID_Unimplemented` if a
    placeholder exists).
+
+### Commands in Algebraic Expressions
+
+Commands that should be usable in algebraic expressions (like `'JDN(DateTime)'`)
+must use `COMMAND_DECLARE_FN` instead of `COMMAND_DECLARE`:
+
+- `COMMAND_DECLARE_FN(name, arity)` adds `PREC_DECL(FUNCTION)` for function
+  precedence
+- Makes the command parseable and callable inside algebraic expressions
+- Use for: mathematical functions, conversion functions, any fixed-arity command
+  that returns one result and should work in expressions
+
+**Note:** `SYMARGS` and `SYMARGS_DECL` are separate and only needed for
+functions that require arguments to stay symbolic/unevaluated (like `Sum`,
+`Integrate`, `Quote`). Most functions just need `COMMAND_DECLARE_FN`, not
+`SYMARGS`.
+
+**Example:**
+```cpp
+// In header (src/datetime.h):
+COMMAND_DECLARE_FN(JulianDayNumber, 1);  // Can be used in expressions
+```
+
+Then in RPL:
+```rpl
+@ Works in both RPN and algebraic mode:
+2461178.5 JDN→                           @ RPN: OK
+'JDN→(2461178.5)'                        @ Algebraic: OK (see commit 40c59d837)
+```
+
+**Variable arity functions** (like `ToRange` which takes 1 or 2 arguments) use
+negative arity notation:
+```cpp
+COMMAND_DECLARE_FN(ToRange, ~2);  // ~2 means "at least 2, variable arity"
+```
+During expression parsing, variadic functions are wrapped in `funcall` to handle
+argument count correctly. The infrastructure provides `variable_arity()` and
+`arity()` helpers.
 
 ### Menu layout
 
@@ -90,6 +149,29 @@ make -j8 dm32           # Build for DM32 (db50x.pg5)
 - **Quick RPL checks** (no rebuild): use simulator `-E` to evaluate a command
   line and print the stack, e.g. `db48x -H -E '[1 2 3] PROOT'`. Read from
   stdin with `-F -`, e.g. `db48x -H -F - -E '1 2 +'`. See `SIMULATOR.md`.
+
+**Quick testing examples from the test suite:**
+
+Using simulator `-E` flag for quick RPL checks:
+```bash
+./db48x.app/Contents/MacOS/db48x -H -E "Clear 'JDN(20250919_date)' →Num"
+```
+
+**Getting default RPL spelling for commands**
+
+To get the default RPL spelling for commands with aliases, you can use the
+following trick:
+
+```bash
+db48x -H -E "{ ToPolar PolarToReal RealToPolar }"
+```
+
+This produces a list containing the actual spellings after parsing:
+
+```
+{ →Polar Polarℂ→ℝ ℝ→Polarℂ }
+```
+
 - **Before submitting changes, run the full test suite** and fix any failures.
   From the repository root (after building the simulator):
   ```
@@ -159,6 +241,45 @@ make -j8 dm32           # Build for DM32 (db50x.pg5)
   Using `neg` inside a list leads to "Bad argument type" when applying →Q or
   similar commands that expect numeric elements.
 
+### User visible tests
+
+**User-visible tests** Document RPL commands and functions in the topical
+markdown files under `doc/`. This is introduced with an RPL block that looks
+like this and is automatically scanned by the test suite
+
+```rpl
+1 2 +
+@ Expecting 3
+```
+
+See `tests::check_help_examples()` for the code that scans and evaluates all
+these code snippets. **Avoid comments in the code snippets** since they are part of the documentation and can be copy/pasted by the user. Usually, the comments should go above the RPL code snippet, i.e. write something like this:
+
+    Adding integers produces the result on the stack:
+
+    ```rpl
+    1 2 +
+    @ Expecting 3
+    ```
+
+rather than
+
+    ```rpl
+    @ Adding integers produces the result on the stack:
+    1 2 +
+    @ Expecting 3
+    ```
+
+### RPL syntax in tests
+
+Remember that RPL uses `@` for comments, not `//` or `#`
+
+The `@ Expecting` fragments needs the space between @ and Expecting
+
+The test suite cleans up between RPL code snippets, except if they contain a
+comment that begins with `@ Keep` or `@ Save`, in which case the variables and
+other changes made by the code snippet are visible to the next one.
+
 ## Architecture Notes
 
 - **DB48X uses C++ in a very special way.** Object values are not stored in the
@@ -200,6 +321,52 @@ make -j8 dm32           # Build for DM32 (db50x.pg5)
   `expression::make(ID_multiply, x, y)` to build symbolic products explicitly.
 - `constant::lookup("π", false)` returns a symbolic constant (the `false`
   suppresses errors if not found). `algebraic::pi()` returns a numeric value.
+
+### The cleaner purge pattern
+
+The **cleaner purge** pattern is a lightweight memory reclamation technique that
+complements garbage collection. It reclaims intermediate temporaries without
+running a full GC cycle.
+
+**Usage pattern:**
+```cpp
+cleaner purge;                              // Save current Temporaries pointer
+algebraic_g result = evaluate(op, y, x);    // Do work (may create temps)
+if (+result != +x && +result != +y)         // Check if result is new
+    result = purge(result);                 // Purge intermediate temporaries
+return result;
+```
+
+**How it works:**
+1. `cleaner purge;` saves the current `rt.Temporaries` pointer and GC cycle count
+2. During computation, intermediate temporary objects may be allocated above that mark
+3. `purge(result)` checks if:
+   - No GC ran during the operation (cycle count unchanged)
+   - The result is a new temporary (above the saved mark)
+   - Automatic cleanup is enabled in settings
+4. If all conditions hold, it discards all temporaries between the saved mark and
+   the result, keeping only the result by moving it down to the saved position
+5. If GC ran (objects may have moved), `purge()` returns the result unchanged
+
+**When to use:**
+- At the end of functions that create multiple intermediate objects but return
+  one final result
+- The idiom is `cleaner purge;` at function start, then `purge(result)` before
+  returning
+
+**The input check:**
+Always verify the result is new before purging:
+```cpp
+if (+result != +input1 && +result != +input2)
+    result = purge(result);
+```
+If you skip this check and the result aliases an input still on the stack, purging
+would move that stack object, corrupting the stack.
+
+**Statistics:**
+The runtime tracks both memory reclamation mechanisms separately:
+- `rt.GCPurged` - bytes reclaimed by full garbage collection
+- `rt.GCCleared` - bytes reclaimed by cleaner purge operations
 
 ### Type ranges (`ID_RANGE`) — critical gotcha
 

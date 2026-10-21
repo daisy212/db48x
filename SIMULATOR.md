@@ -6,7 +6,7 @@ It brings calculator functionality to your computer (Linux, macOS, Windows + WSL
 This document describes some of its additional functionality.
 Building the simulator is described in [BUILD](BUILD.md).
 
-Run the simulator with the command `<path>/sim/db48x [Option]* [argument]*`.
+Run the simulator with the command `<path>/db48x [Option]* [argument]*`.
 The simulator uses a few [Environment variables](#environment-variables), and its behavior can be further
 influenced with [Options](#options) and/or [Arguments](#arguments).
 
@@ -50,6 +50,7 @@ The simulator can be started with the command-line options listed in the table b
 | -s[[`<whitespace>`]`<real>`] | Scale the application window by the given floating-point scaling factor. |
 | -t`<trace>` | Enable the named recorder trace. Multiple traces can be enabled by using multiple `-t` options, or by using a regular expression as an argument to `-t`. |
 | -w[[`<whitespace>`]`<integer>`] | Set the default time the test suite waits for a command to complete, in milliseconds. You can increase this to run the test suite on a very slow machine. The default = 1000 ms. |
+| -Z | Zero the initial state of the calculator (clean slate mode) |
 
 
 ## Arguments
@@ -146,7 +147,7 @@ If you make changes, run the test suite to verify you did not break existing fun
 
 The calculator code frequently calls the `record(<name>, ...);` procedure to record what is happening at that point.
 
-If you run the simulator with the command `<path>/sim/db48x -t<name>`, the recorder prints those trace messages (see also [Environment variables](#environment-variables) and [Options](#options)).
+If you run the simulator with the command `<path>/db48x -t<name>`, the recorder prints those trace messages (see also [Environment variables](#environment-variables) and [Options](#options)).
 
 ## Post-mortem flight recorder dump
 
