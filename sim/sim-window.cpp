@@ -759,26 +759,6 @@ void MainWindow::handleAppStateChange(Qt::ApplicationState state)
 };
 
 
-static mousemap *findKey(qreal relx, qreal rely, qreal w, qreal h)
-// ----------------------------------------------------------------------------
-//   Find the key cap nearest to a press, so that no gap is a dead zone
-// ----------------------------------------------------------------------------
-{
-    mousemap *best = nullptr;
-    qreal     bestDist = 0;
-    for (mousemap *ptr = mouseMap; ptr->key; ptr++)
-    {
-        qreal dx = qMax(qMax(ptr->left - relx, relx - ptr->right), 0.0) * w;
-        qreal dy = qMax(qMax(ptr->top - rely, rely - ptr->bot), 0.0) * h;
-        qreal dist = dx * dx + dy * dy;
-        if (!best || dist < bestDist)
-        {
-            best = ptr;
-            bestDist = dist;
-        }
-    }
-    return best;
-}
 
 
 #ifdef ANDROID
@@ -848,8 +828,8 @@ static void android_haptic_tap()
     });
 }
 #endif // ANDROID
-        {                0,  0,      0.0,      0.0,      0.0,      0.0}
-    };
+//        {                0,  0,      0.0,      0.0,      0.0,      0.0}
+//    };
 
 #endif
 
@@ -1082,6 +1062,27 @@ struct mousemap mouseMap[]{
 };
 
 #endif
+
+static mousemap *findKey(qreal relx, qreal rely, qreal w, qreal h)
+// ----------------------------------------------------------------------------
+//   Find the key cap nearest to a press, so that no gap is a dead zone
+// ----------------------------------------------------------------------------
+{
+    mousemap *best = nullptr;
+    qreal     bestDist = 0;
+    for (mousemap *ptr = mouseMap; ptr->key; ptr++)
+    {
+        qreal dx = qMax(qMax(ptr->left - relx, relx - ptr->right), 0.0) * w;
+        qreal dy = qMax(qMax(ptr->top - rely, rely - ptr->bot), 0.0) * h;
+        qreal dist = dx * dx + dy * dy;
+        if (!best || dist < bestDist)
+        {
+            best = ptr;
+            bestDist = dist;
+        }
+    }
+    return best;
+}
 
 
 void MainWindow::pushKey(int key)
